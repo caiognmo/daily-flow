@@ -1200,50 +1200,60 @@ export default function Home() {
                 {data.employees.map((employee, index) => (
                   <div className="employee-row" key={index}>
                     <span className="employee-index">
-                      {String(index + 1).padStart(2, '0')}
+                      Funcionário {String(index + 1).padStart(2, '0')}
                     </span>
-                    <VoiceField
-                      label={`nome do funcionário ${index + 1}`}
-                      onTranscript={(text) =>
-                        updateEmployee(
-                          index,
-                          'name',
-                          mergeVoiceText(employee.name, text),
-                        )
-                      }
-                    >
-                      <div className="iconinput">
-                        <UserRound />
+                    <div className="employee-field employee-name">
+                      <label htmlFor={`employee-name-${index}`}>
+                        Nome do funcionário
+                      </label>
+                      <VoiceField
+                        label={`nome do funcionário ${index + 1}`}
+                        onTranscript={(text) =>
+                          updateEmployee(
+                            index,
+                            'name',
+                            mergeVoiceText(employee.name, text),
+                          )
+                        }
+                      >
+                        <div className="iconinput">
+                          <UserRound />
+                          <input
+                            id={`employee-name-${index}`}
+                            placeholder="Digite o nome completo"
+                            value={employee.name}
+                            onChange={(e) =>
+                              updateEmployee(index, 'name', e.target.value)
+                            }
+                          />
+                        </div>
+                      </VoiceField>
+                    </div>
+                    <div className="employee-field employee-role">
+                      <label htmlFor={`employee-role-${index}`}>
+                        Cargo ou função
+                      </label>
+                      <VoiceField
+                        label={`cargo do funcionário ${index + 1}`}
+                        onTranscript={(text) =>
+                          updateEmployee(
+                            index,
+                            'role',
+                            mergeVoiceText(employee.role, text),
+                          )
+                        }
+                      >
                         <input
-                          aria-label={`Nome do funcionário ${index + 1}`}
-                          placeholder="Nome completo"
-                          value={employee.name}
+                          id={`employee-role-${index}`}
+                          className="input"
+                          placeholder="Digite o cargo ou a função"
+                          value={employee.role}
                           onChange={(e) =>
-                            updateEmployee(index, 'name', e.target.value)
+                            updateEmployee(index, 'role', e.target.value)
                           }
                         />
-                      </div>
-                    </VoiceField>
-                    <VoiceField
-                      label={`cargo do funcionário ${index + 1}`}
-                      onTranscript={(text) =>
-                        updateEmployee(
-                          index,
-                          'role',
-                          mergeVoiceText(employee.role, text),
-                        )
-                      }
-                    >
-                      <input
-                        className="input"
-                        aria-label={`Cargo do funcionário ${index + 1}`}
-                        placeholder="Cargo"
-                        value={employee.role}
-                        onChange={(e) =>
-                          updateEmployee(index, 'role', e.target.value)
-                        }
-                      />
-                    </VoiceField>
+                      </VoiceField>
+                    </div>
                     <button
                       className="remove-employee"
                       aria-label={`Remover funcionário ${index + 1}`}
