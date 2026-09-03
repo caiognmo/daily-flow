@@ -1879,7 +1879,7 @@ function LiquidBackground() {
       fragmentShader: `precision highp float;varying vec2 vUv;uniform sampler2D uTexture;uniform float uTime;uniform float uAspect;uniform float uMobile;uniform vec2 uPointer;uniform vec2 uTrail;
 float water(vec2 p,float t){float a=sin(p.x*5.2+p.y*3.1+t*.55);float b=sin(p.x*3.4-p.y*5.8-t*.43);float c=sin((p.x+p.y)*8.0+t*.31);return (a+b*.68+c*.32)/2.0;}
 float caustic(vec2 p,float t){vec2 q=p+vec2(sin(p.y*5.0+t),cos(p.x*4.3-t))*.055;float a=sin(q.x*10.0+sin(q.y*8.0+t));float b=sin(q.y*11.0+cos(q.x*7.0-t*.7));return pow(max(0.0,1.0-abs(a-b)),12.0);}
-void main(){vec2 uv=vUv;vec2 p=uv-.5;p.x*=uAspect;vec2 mp=uPointer-.5;mp.x*=uAspect;vec2 tp=uTrail-.5;tp.x*=uAspect;float d=length(p-mp),dt=length(p-tp);float ring=sin(d*42.0-uTime*5.0)*exp(-d*6.0);float wake=sin(dt*31.0-uTime*3.6)*exp(-dt*7.5);float h=water(p*1.1,uTime),hx=water((p+vec2(.012,0.0))*1.1,uTime),hy=water((p+vec2(0.0,.012))*1.1,uTime);vec2 normal=vec2(hx-h,hy-h);vec2 dir=normalize(p-mp+vec2(.0001));float distortion=mix(1.0,.42,uMobile);vec2 refractUv=uv+normal*(.052*distortion)+dir*ring*(.035*distortion)+vec2(wake,-wake)*(.008*distortion);vec4 ink=texture2D(uTexture,refractUv);float light=caustic(p*.9,uTime*.38);float glint=pow(max(0.0,normal.x-normal.y+.025),3.0)*mix(70.0,42.0,uMobile);vec3 base=mix(vec3(.72,.827,.855),vec3(.9,.95,.965),.48+h*.09);base+=vec3(.86,.97,1.0)*(light*.075+glint*.035);base+=exp(-d*10.0)*vec3(.035,.07,.09);vec3 letters=vec3(0.0,.286,.466)+vec3(.75,.93,1.0)*(light*.36+glint*.18)+ring*.08;float soft=texture2D(uTexture,refractUv+normal*.025).a;vec3 color=base-soft*.035;color=mix(color,letters,ink.a*.94);float vignette=smoothstep(1.12,.2,length(p));color*=.91+.09*vignette;gl_FragColor=vec4(color,1.0);}`,
+void main(){vec2 uv=vUv;vec2 p=uv-.5;p.x*=uAspect;vec2 mp=uPointer-.5;mp.x*=uAspect;vec2 tp=uTrail-.5;tp.x*=uAspect;float d=length(p-mp),dt=length(p-tp);float ring=sin(d*42.0-uTime*5.0)*exp(-d*6.0);float wake=sin(dt*31.0-uTime*3.6)*exp(-dt*7.5);float h=water(p*1.1,uTime),hx=water((p+vec2(.012,0.0))*1.1,uTime),hy=water((p+vec2(0.0,.012))*1.1,uTime);vec2 normal=vec2(hx-h,hy-h);vec2 dir=normalize(p-mp+vec2(.0001));float distortion=mix(1.0,.42,uMobile);vec2 refractUv=uv+normal*(.052*distortion)+dir*ring*(.035*distortion)+vec2(wake,-wake)*(.008*distortion);vec4 ink=texture2D(uTexture,refractUv);vec4 stableInk=texture2D(uTexture,uv);float letterMask=max(ink.a,stableInk.a*mix(0.0,.34,uMobile));float light=caustic(p*.9,uTime*.38);float glint=pow(max(0.0,normal.x-normal.y+.025),3.0)*mix(70.0,42.0,uMobile);vec3 base=mix(vec3(.72,.827,.855),vec3(.9,.95,.965),.48+h*.09);base+=vec3(.86,.97,1.0)*(light*.075+glint*.035);base+=exp(-d*10.0)*vec3(.035,.07,.09);vec3 letters=vec3(0.0,.286,.466)+vec3(.75,.93,1.0)*(light*.36+glint*.18)+ring*.08;float soft=texture2D(uTexture,refractUv+normal*.025).a;vec3 color=base-soft*.035;color=mix(color,letters,letterMask*.94);float vignette=smoothstep(1.12,.2,length(p));color*=.91+.09*vignette;gl_FragColor=vec4(color,1.0);}`,
     });
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
@@ -1902,10 +1902,17 @@ void main(){vec2 uv=vUv;vec2 p=uv-.5;p.x*=uAspect;vec2 mp=uPointer-.5;mp.x*=uAsp
       sourceCtx.clearRect(0, 0, w, h);
       sourceCtx.textAlign = 'center';
       sourceCtx.textBaseline = 'middle';
-      sourceCtx.font = `900 ${Math.min(w * 0.175, h * 0.275)}px Arial Black, Arial, sans-serif`;
-      sourceCtx.letterSpacing = `${Math.max(2, w * 0.004)}px`;
+      const mobileFontSize =
+          Math.min(76, Math.max(58, innerWidth * 0.19)) * ratio,
+        fontSize = mobile ? mobileFontSize : Math.min(w * 0.175, h * 0.275);
+      sourceCtx.font = mobile
+        ? `750 ${fontSize}px ${getComputedStyle(document.body).fontFamily}`
+        : `900 ${fontSize}px Arial Black, Arial, sans-serif`;
+      sourceCtx.letterSpacing = mobile
+        ? `${fontSize * -0.07}px`
+        : `${Math.max(2, w * 0.004)}px`;
       sourceCtx.fillStyle = 'rgba(22,25,24,.94)';
-      if (!mobile) sourceCtx.fillText('SigeDaily', w / 2, h * 0.43);
+      sourceCtx.fillText('SigeDaily', w / 2, h * (mobile ? 0.415 : 0.43));
       texture.needsUpdate = true;
     };
     const resize = () => {
