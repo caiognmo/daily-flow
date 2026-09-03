@@ -1,0 +1,39 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sigedaily",
+  "account_id": "1a79c1a9a38a5009fce1a6dfc9aa9e53",
+  "main": "vinext/server/fetch-handler",
+  "compatibility_date": "2026-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sigedaily-db",
+      "database_id": "d8687b05-2b13-41de-8133-c9051a1accc9"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "sigedaily-audios"
+    }
+  ],
+  "vars": {
+    "ADMIN_EMAILS": "caio@sistemasbr.com.br,caio@sistemasbr.net"
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
+  }
+}

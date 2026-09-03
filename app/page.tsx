@@ -419,9 +419,9 @@ export default function Home() {
     )
       .then((response) => {
         if (!response.ok) throw new Error();
-        return response.json();
+        return response.json() as Promise<{ nome: string }[]>;
       })
-      .then((items: { nome: string }[]) =>
+      .then((items) =>
         setCities(items.map((item) => item.nome)),
       )
       .catch(() => {
