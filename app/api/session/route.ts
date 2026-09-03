@@ -1,11 +1,8 @@
 import { env } from 'cloudflare:workers';
-import {
-  isAllowedCompanyEmail,
-  requestEmail,
-} from '@/lib/request-identity';
+import { isAllowedCompanyEmail, requestEmail } from '@/lib/request-identity';
 
 export async function GET(request: Request) {
-  const email = requestEmail(request);
+  const email = await requestEmail(request);
   const admins = (
     (env as unknown as Record<string, string>).ADMIN_EMAILS ||
     'caio@sistemasbr.com.br,caio@sistemasbr.net'
@@ -15,7 +12,10 @@ export async function GET(request: Request) {
     .map((value) => value.trim());
   const isAdmin = admins.includes(email);
   if (!email || !isAllowedCompanyEmail(email))
-    return Response.json({ authenticated: false }, { status: 401 });
+    return Response.json(
+      { authenticated: false },
+      { status: 401, headers: { 'cache-control': 'no-store' } },
+    );
   let permission = { canEdit: false, canDelete: false, enabled: true };
   if (isAdmin) permission = { canEdit: true, canDelete: true, enabled: true };
   else {
@@ -37,10 +37,13 @@ export async function GET(request: Request) {
       { authenticated: true, email, enabled: false },
       { status: 403 },
     );
-  return Response.json({
-    authenticated: true,
-    email,
-    isAdmin,
-    ...permission,
-  });
+  return Response.json(
+    {
+      authenticated: true,
+      email,
+      isAdmin,
+      ...permission,
+    },
+    { headers: { 'cache-control': 'no-store' } },
+  );
 }

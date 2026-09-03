@@ -5,12 +5,9 @@ import {
   MAX_AUDIO_BYTES,
   putAudio,
 } from '@/lib/audio-storage';
-import {
-  isAllowedCompanyEmail,
-  requestEmail,
-} from '@/lib/request-identity';
+import { isAllowedCompanyEmail, requestEmail } from '@/lib/request-identity';
 const user = async (request: Request) => {
-  const email = requestEmail(request),
+  const email = await requestEmail(request),
     admins = (
       (env as unknown as Record<string, string>).ADMIN_EMAILS ||
       'caio@sistemasbr.com.br,caio@sistemasbr.net'
@@ -64,8 +61,7 @@ export async function PUT(
       );
     const nextAudioKey = audioKeyFor(id, audio);
     await putAudio(nextAudioKey, audio);
-    if (audioKey && audioKey !== nextAudioKey)
-      await deleteAudio(audioKey);
+    if (audioKey && audioKey !== nextAudioKey) await deleteAudio(audioKey);
     audioKey = nextAudioKey;
   }
   const storedPayload = { ...data, createdBy: existing.created_by };

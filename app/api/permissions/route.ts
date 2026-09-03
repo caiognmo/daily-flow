@@ -9,7 +9,7 @@ const adminEmails = () =>
     .split(',')
     .map((value) => value.trim());
 export async function GET(request: Request) {
-  if (!adminEmails().includes(requestEmail(request)))
+  if (!adminEmails().includes(await requestEmail(request)))
     return Response.json({ error: 'Sem permissão' }, { status: 403 });
   const rows = await (env.DB as D1Database)
     .prepare(
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   return Response.json(rows.results);
 }
 export async function POST(request: Request) {
-  if (!adminEmails().includes(requestEmail(request)))
+  if (!adminEmails().includes(await requestEmail(request)))
     return Response.json({ error: 'Sem permissão' }, { status: 403 });
   const d = (await request.json()) as {
       email: string;

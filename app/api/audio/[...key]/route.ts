@@ -1,14 +1,11 @@
 import { env } from 'cloudflare:workers';
 import type { AudioMetadata } from '@/lib/audio-storage';
-import {
-  isAllowedCompanyEmail,
-  requestEmail,
-} from '@/lib/request-identity';
+import { isAllowedCompanyEmail, requestEmail } from '@/lib/request-identity';
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ key: string[] }> },
 ) {
-  const email = requestEmail(request);
+  const email = await requestEmail(request);
   if (!isAllowedCompanyEmail(email))
     return new Response('Não autorizado', { status: 401 });
   const { key } = await params,

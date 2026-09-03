@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Script from 'next/script';
 import {
   ArrowLeft,
   ArrowRight,
@@ -86,6 +87,31 @@ type SessionInfo = {
   canEdit: boolean;
   canDelete: boolean;
 };
+type GoogleTokenResponse = {
+  access_token?: string;
+  error?: string;
+  error_description?: string;
+};
+type GoogleTokenClient = {
+  requestAccessToken: (options?: { prompt?: string }) => void;
+};
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        oauth2: {
+          initTokenClient: (configuration: {
+            client_id: string;
+            scope: string;
+            prompt?: string;
+            callback: (response: GoogleTokenResponse) => void;
+            error_callback?: () => void;
+          }) => GoogleTokenClient;
+        };
+      };
+    };
+  }
+}
 const initial: FormData = {
   client: '',
   city: '',
@@ -240,9 +266,11 @@ export default function Home() {
   const [homeSession, setHomeSession] = useState<SessionInfo | null>(null),
     [authLoading, setAuthLoading] = useState(true),
     [authError, setAuthError] = useState('');
+  const [googleClientId, setGoogleClientId] = useState(''),
+    [googleReady, setGoogleReady] = useState(false),
+    [wrongGoogleAccount, setWrongGoogleAccount] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null),
     [dailyCreator, setDailyCreator] = useState('');
-  const authPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const update = <K extends keyof FormData>(k: K, v: FormData[K]) =>
     setData((o) => ({ ...o, [k]: v }));
   const updateEmployee = (index: number, key: keyof Employee, value: string) =>
@@ -273,7 +301,8 @@ export default function Home() {
         setAuthError('');
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return;
         setHomeSession(null);
         setAuthError(
           error instanceof Error
@@ -284,8 +313,25 @@ export default function Home() {
       .finally(() => setAuthLoading(false));
     return () => {
       controller.abort();
-      if (authPollRef.current) clearInterval(authPollRef.current);
     };
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/auth/config', {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        return response.json() as Promise<{ clientId: string }>;
+      })
+      .then(({ clientId }) => setGoogleClientId(clientId))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return;
+        setAuthError('O login Google ainda não está disponível.');
+      });
+    return () => controller.abort();
   }, []);
   const openAuthPopup = () => {
     if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
@@ -304,46 +350,64 @@ export default function Home() {
         .finally(() => setAuthLoading(false));
       return;
     }
-    const width = 520,
-      height = 680,
-      left = Math.max(0, window.screenX + (window.outerWidth - width) / 2),
-      top = Math.max(0, window.screenY + (window.outerHeight - height) / 2),
-      popup = window.open(
-        '/cdn-cgi/access/login',
-        'sigedaily-google-auth',
-        `popup=yes,width=${width},height=${height},left=${left},top=${top}`,
-      );
-    if (!popup) {
-      window.location.assign('/cdn-cgi/access/login');
+    const oauth = window.google?.accounts.oauth2;
+    if (!oauth || !googleClientId) {
+      setAuthError('Aguarde o carregamento do login Google e tente novamente.');
       return;
     }
     setAuthLoading(true);
-    setAuthError('Conclua o acesso na janela de autenticação.');
-    if (authPollRef.current) clearInterval(authPollRef.current);
-    let attempts = 0;
-    authPollRef.current = setInterval(async () => {
-      attempts += 1;
-      try {
-        const response = await fetch('/api/session', { cache: 'no-store' });
-        if (response.ok) {
-          const session = (await response.json()) as SessionInfo;
-          setHomeSession(session);
-          setDailyCreator((creator) => creator || session.email);
-          setAuthError('');
+    setAuthError('Escolha sua conta Google na janela que será aberta.');
+    const tokenClient = oauth.initTokenClient({
+      client_id: googleClientId,
+      scope: 'openid email profile',
+      prompt: 'select_account',
+      callback: async (googleResponse) => {
+        if (!googleResponse.access_token) {
           setAuthLoading(false);
-          if (!popup.closed) popup.close();
-          if (authPollRef.current) clearInterval(authPollRef.current);
-          authPollRef.current = null;
+          setAuthError(
+            'A autenticação do Google foi cancelada. Tente novamente.',
+          );
           return;
         }
-      } catch {}
-      if (popup.closed || attempts >= 120) {
+        try {
+          const response = await fetch('/api/auth/google', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ accessToken: googleResponse.access_token }),
+          });
+          const result = (await response.json()) as {
+            code?: string;
+            error?: string;
+          };
+          if (!response.ok) {
+            setWrongGoogleAccount(result.code === 'invalid_domain');
+            throw new Error(result.error || 'Não foi possível entrar.');
+          }
+          const sessionResponse = await fetch('/api/session', {
+            cache: 'no-store',
+          });
+          if (!sessionResponse.ok) throw new Error('Sessão não confirmada.');
+          const session = (await sessionResponse.json()) as SessionInfo;
+          setHomeSession(session);
+          setDailyCreator(session.email);
+          setWrongGoogleAccount(false);
+          setAuthError('');
+        } catch (error) {
+          setAuthError(
+            error instanceof Error
+              ? error.message
+              : 'Não foi possível concluir o login Google.',
+          );
+        } finally {
+          setAuthLoading(false);
+        }
+      },
+      error_callback: () => {
         setAuthLoading(false);
-        setAuthError('A autenticação não foi concluída. Tente novamente.');
-        if (authPollRef.current) clearInterval(authPollRef.current);
-        authPollRef.current = null;
-      }
-    }, 1000);
+        setAuthError('Não foi possível abrir o seletor de contas Google.');
+      },
+    });
+    tokenClient.requestAccessToken({ prompt: 'select_account' });
   };
   useEffect(() => {
     const context = (
@@ -421,9 +485,7 @@ export default function Home() {
         if (!response.ok) throw new Error();
         return response.json() as Promise<{ nome: string }[]>;
       })
-      .then((items) =>
-        setCities(items.map((item) => item.nome)),
-      )
+      .then((items) => setCities(items.map((item) => item.nome)))
       .catch(() => {
         if (!controller.signal.aborted) setCities([]);
       })
@@ -617,8 +679,8 @@ export default function Home() {
       const response = await fetch(
         editingId ? `/api/dailys/${editingId}` : '/api/dailys',
         {
-        method: editingId ? 'PUT' : 'POST',
-        body: form,
+          method: editingId ? 'PUT' : 'POST',
+          body: form,
         },
       );
       const result = (await response.json()) as {
@@ -637,9 +699,7 @@ export default function Home() {
         );
       setSaveStatus(editingId ? 'Daily atualizada' : 'Daily salva');
     } catch (error) {
-      setSaveStatus(
-        error instanceof Error ? error.message : 'Erro ao salvar',
-      );
+      setSaveStatus(error instanceof Error ? error.message : 'Erro ao salvar');
     }
   };
   const returnToHome = () => {
@@ -658,92 +718,110 @@ export default function Home() {
     setLinkCopied(false);
     window.scrollTo({ top: 0 });
   };
-  const signOut = () => {
+  const signOut = async () => {
+    if (!['localhost', '127.0.0.1'].includes(window.location.hostname))
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
     returnToHome();
-    if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
-      setHomeSession(null);
-      setAuthLoading(false);
-      setAuthError('Sessão encerrada. Entre novamente para continuar.');
-      return;
-    }
-    window.location.assign('/cdn-cgi/access/logout');
+    setHomeSession(null);
+    setDailyCreator('');
+    setWrongGoogleAccount(false);
+    setAuthLoading(false);
+    setAuthError('Sessão encerrada. Escolha uma conta Google para continuar.');
   };
   if (reportData) return <ReportView data={reportData} />;
   if ((!started && !consulting) || !homeSession)
     return (
-      <main className="welcome liquid-home">
-        <LiquidBackground />
-        <div className="brand-orbs" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-          <i />
-        </div>
-        <div className="liquid-vignette" />
-        <div className="home-context">
-          <span>Implantações</span>
-          <b>Acompanhamento diário</b>
-        </div>
-        <div className="daily-word" aria-hidden="true">
-          SigeDaily
-        </div>
-        {homeSession && (
-          <div className="home-account">
-            <ShieldCheck />
-            <span>
-              <small>Conta autenticada</small>
-              <b>{homeSession.email}</b>
-            </span>
-            <button
-              type="button"
-              className="account-logout"
-              onClick={signOut}
-              aria-label="Sair da conta Google"
-              title="Sair da conta Google"
-            >
-              <LogOut />
-            </button>
+      <>
+        <Script
+          src="https://accounts.google.com/gsi/client"
+          strategy="afterInteractive"
+          onReady={() => setGoogleReady(true)}
+          onError={() => {
+            setGoogleReady(false);
+            setAuthError('Não foi possível carregar o login Google.');
+          }}
+        />
+        <main className="welcome liquid-home">
+          <LiquidBackground />
+          <div className="brand-orbs" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
           </div>
-        )}
-        {authLoading ? (
-          <div className="auth-card auth-loading">
-            <span className="auth-spinner" />
-            <b>Validando acesso seguro</b>
-            <small>Verificando sua conta SistemasBR…</small>
+          <div className="liquid-vignette" />
+          <div className="home-context">
+            <span>Implantações</span>
+            <b>Acompanhamento diário</b>
           </div>
-        ) : homeSession ? (
-          <div className="home-actions">
-            <button
-              className="start liquid-start"
-              onClick={() => setStarted(true)}
-            >
-              Iniciar daily{' '}
-              <span>
-                <ArrowRight />
-              </span>
-            </button>
-            <button
-              className="consult-home"
-              onClick={() => setConsulting(true)}
-            >
-              <Search /> Consultar dailys
-            </button>
+          <div className="daily-word" aria-hidden="true">
+            SigeDaily
           </div>
-        ) : (
-          <div className="auth-card">
-            <span className="auth-icon">
+          {homeSession && (
+            <div className="home-account">
               <ShieldCheck />
-            </span>
-            <small>Acesso interno</small>
-            <b>Entre para acessar o SigeDaily</b>
-            <p>{authError}</p>
-            <button type="button" onClick={openAuthPopup}>
-              <UserRound /> Entrar com Google corporativo
-            </button>
-            <em>@sistemasbr.net ou @sistemasbr.com.br</em>
-          </div>
-        )}
-      </main>
+              <span>
+                <small>Conta autenticada</small>
+                <b>{homeSession.email}</b>
+              </span>
+              <button
+                type="button"
+                className="account-logout"
+                onClick={signOut}
+                aria-label="Sair da conta Google"
+                title="Sair da conta Google"
+              >
+                <LogOut />
+              </button>
+            </div>
+          )}
+          {authLoading ? (
+            <div className="auth-card auth-loading">
+              <span className="auth-spinner" />
+              <b>Validando acesso seguro</b>
+              <small>Verificando sua conta SistemasBR…</small>
+            </div>
+          ) : homeSession ? (
+            <div className="home-actions">
+              <button
+                className="start liquid-start"
+                onClick={() => setStarted(true)}
+              >
+                Iniciar daily{' '}
+                <span>
+                  <ArrowRight />
+                </span>
+              </button>
+              <button
+                className="consult-home"
+                onClick={() => setConsulting(true)}
+              >
+                <Search /> Consultar dailys
+              </button>
+            </div>
+          ) : (
+            <div className="auth-card">
+              <span className="auth-icon">
+                <ShieldCheck />
+              </span>
+              <small>Acesso interno</small>
+              <b>Entre para acessar o SigeDaily</b>
+              <p>{authError}</p>
+              <button
+                type="button"
+                onClick={openAuthPopup}
+                disabled={!googleReady || !googleClientId}
+              >
+                <UserRound />{' '}
+                {wrongGoogleAccount
+                  ? 'Escolher outra conta Google'
+                  : 'Entrar com Google corporativo'}
+              </button>
+              <em>@sistemasbr.net ou @sistemasbr.com.br</em>
+            </div>
+          )}
+        </main>
+      </>
     );
   if (consulting)
     return (
@@ -858,8 +936,7 @@ export default function Home() {
           <div className="creator-strip">
             <UserRound />
             <span>
-              Daily criada por{' '}
-              <b>{dailyCreator || homeSession.email}</b>
+              Daily criada por <b>{dailyCreator || homeSession.email}</b>
             </span>
             {editingId && <em>Modo de edição</em>}
           </div>
@@ -1321,7 +1398,8 @@ export default function Home() {
               <div className="report-link-actions">
                 <button className="save-daily" onClick={saveDaily}>
                   <CheckCircle2 />{' '}
-                  {saveStatus || (editingId ? 'Atualizar daily' : 'Salvar daily')}
+                  {saveStatus ||
+                    (editingId ? 'Atualizar daily' : 'Salvar daily')}
                 </button>
                 <button className="send" onClick={shareReport}>
                   <Send /> Enviar resumo com link
@@ -1509,7 +1587,7 @@ function DailyConsultation({
     }
   };
   useEffect(() => {
-    load();
+    void load();
   }, []);
   const filtered = rows.filter((r) => {
     const hay =

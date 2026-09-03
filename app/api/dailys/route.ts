@@ -1,12 +1,9 @@
 import { env } from 'cloudflare:workers';
 import { audioKeyFor, MAX_AUDIO_BYTES, putAudio } from '@/lib/audio-storage';
-import {
-  isAllowedCompanyEmail,
-  requestEmail,
-} from '@/lib/request-identity';
+import { isAllowedCompanyEmail, requestEmail } from '@/lib/request-identity';
 
 export async function GET(request: Request) {
-  const email = requestEmail(request);
+  const email = await requestEmail(request);
   if (!isAllowedCompanyEmail(email))
     return Response.json({ error: 'Não autorizado' }, { status: 401 });
   const rows = await (env.DB as D1Database)
@@ -17,7 +14,7 @@ export async function GET(request: Request) {
   return Response.json(rows.results);
 }
 export async function POST(request: Request) {
-  const email = requestEmail(request);
+  const email = await requestEmail(request);
   if (!isAllowedCompanyEmail(email))
     return Response.json({ error: 'Não autorizado' }, { status: 401 });
   const form = await request.formData(),

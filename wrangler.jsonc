@@ -10,32 +10,33 @@
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "sigedaily-db",
-      "database_id": "d8687b05-2b13-41de-8133-c9051a1accc9"
-    }
+      "database_id": "d8687b05-2b13-41de-8133-c9051a1accc9",
+    },
   ],
   "kv_namespaces": [
     {
       "binding": "AUDIO_FILES",
-      "id": "ac600b77892c43ada077803b06ba297f"
-    }
+      "id": "ac600b77892c43ada077803b06ba297f",
+    },
   ],
   "vars": {
-    "ADMIN_EMAILS": "caio@sistemasbr.com.br,caio@sistemasbr.net"
+    "ADMIN_EMAILS": "caio@sistemasbr.com.br,caio@sistemasbr.net",
+    "GOOGLE_CLIENT_ID": "266273788761-rps49beintmknupulbsth2jjtpha04bs.apps.googleusercontent.com",
   },
   "observability": {
     "enabled": true,
     "logs": {
-      "head_sampling_rate": 1
+      "head_sampling_rate": 1,
     },
     "traces": {
       "enabled": true,
-      "head_sampling_rate": 0.01
-    }
-  }
+      "head_sampling_rate": 0.01,
+    },
+  },
 }
