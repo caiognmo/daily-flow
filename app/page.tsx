@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronDown,
   Clipboard,
   Download,
   ExternalLink,
@@ -1704,6 +1705,7 @@ function DailyConsultation({
     [uf, setUf] = useState(''),
     [planFilter, setPlanFilter] = useState(''),
     [date, setDate] = useState(''),
+    [filtersOpen, setFiltersOpen] = useState(false),
     [showPermissions, setShowPermissions] = useState(false);
   const [permEmail, setPermEmail] = useState(''),
     [canEdit, setCanEdit] = useState(false),
@@ -1750,6 +1752,9 @@ function DailyConsultation({
       (!date || r.end_date === date)
     );
   });
+  const activeFilterCount = [query, uf, planFilter, date].filter(
+    Boolean,
+  ).length;
   const payload = (row: DailyRow) => {
     const value = JSON.parse(row.payload) as ReportPayload;
     value.createdBy = row.created_by;
@@ -2044,7 +2049,23 @@ function DailyConsultation({
             )}
           </section>
         )}
-        <section className="filters">
+        <div className="filter-disclosure">
+          <button
+            type="button"
+            className="filter-toggle"
+            aria-expanded={filtersOpen}
+            aria-controls="daily-filters"
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            <span>
+              <Filter /> Filtros
+              {activeFilterCount > 0 && <b>{activeFilterCount}</b>}
+            </span>
+            <small>{filtered.length} resultados</small>
+            <ChevronDown className={filtersOpen ? 'open' : ''} />
+          </button>
+        </div>
+        <section id="daily-filters" className="filters" hidden={!filtersOpen}>
           <div>
             <Search />
             <input
@@ -2075,9 +2096,6 @@ function DailyConsultation({
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
-          <span>
-            <Filter /> {filtered.length} resultados
-          </span>
         </section>
         {notice && <p className="consult-notice">{notice}</p>}
         {loading ? (
