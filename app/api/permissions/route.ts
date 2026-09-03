@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { requestEmail } from '@/lib/request-identity';
 const adminEmails = () =>
   (
     (env as unknown as Record<string, string>).ADMIN_EMAILS ||
@@ -7,19 +8,8 @@ const adminEmails = () =>
     .toLowerCase()
     .split(',')
     .map((value) => value.trim());
-const identity = (request: Request) => {
-  const u = new URL(request.url),
-    local = ['localhost', '127.0.0.1'].includes(u.hostname);
-  return (
-    local
-      ? 'caio@sistemasbr.com.br'
-      : request.headers.get('cf-access-authenticated-user-email') ||
-        request.headers.get('oai-authenticated-user-email') ||
-        ''
-  ).toLowerCase();
-};
 export async function GET(request: Request) {
-  if (!adminEmails().includes(identity(request)))
+  if (!adminEmails().includes(requestEmail(request)))
     return Response.json({ error: 'Sem permissão' }, { status: 403 });
   const rows = await (env.DB as D1Database)
     .prepare(
@@ -29,7 +19,7 @@ export async function GET(request: Request) {
   return Response.json(rows.results);
 }
 export async function POST(request: Request) {
-  if (!adminEmails().includes(identity(request)))
+  if (!adminEmails().includes(requestEmail(request)))
     return Response.json({ error: 'Sem permissão' }, { status: 403 });
   const d = (await request.json()) as {
       email: string;

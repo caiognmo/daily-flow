@@ -1,14 +1,16 @@
 import { env } from 'cloudflare:workers';
+import {
+  audioKeyFor,
+  deleteAudio,
+  MAX_AUDIO_BYTES,
+  putAudio,
+} from '@/lib/audio-storage';
+import {
+  isAllowedCompanyEmail,
+  requestEmail,
+} from '@/lib/request-identity';
 const user = async (request: Request) => {
-  const url = new URL(request.url),
-    local = ['localhost', '127.0.0.1'].includes(url.hostname),
-    email = (
-      local
-        ? 'caio@sistemasbr.com.br'
-        : request.headers.get('cf-access-authenticated-user-email') ||
-          request.headers.get('oai-authenticated-user-email') ||
-          ''
-    ).toLowerCase(),
+  const email = requestEmail(request),
     admins = (
       (env as unknown as Record<string, string>).ADMIN_EMAILS ||
       'caio@sistemasbr.com.br,caio@sistemasbr.net'
@@ -16,11 +18,7 @@ const user = async (request: Request) => {
       .toLowerCase()
       .split(',')
       .map((value) => value.trim());
-  if (
-    !email.endsWith('@sistemasbr.net') &&
-    !email.endsWith('@sistemasbr.com.br')
-  )
-    return null;
+  if (!isAllowedCompanyEmail(email)) return null;
   if (admins.includes(email)) return { email, canEdit: true, canDelete: true };
   const p = await (env.DB as D1Database)
     .prepare(
@@ -59,12 +57,15 @@ export async function PUT(
   } else data = (await request.json()) as Record<string, unknown>;
   let audioKey = existing.audio_key;
   if (audio instanceof File && audio.size) {
-    const nextAudioKey = `dailys/${id}/${audio.name}`;
-    await (env.FILES as R2Bucket).put(nextAudioKey, audio.stream(), {
-      httpMetadata: { contentType: audio.type },
-    });
+    if (audio.size > MAX_AUDIO_BYTES)
+      return Response.json(
+        { error: 'O áudio deve ter no máximo 20 MB.' },
+        { status: 413 },
+      );
+    const nextAudioKey = audioKeyFor(id, audio);
+    await putAudio(nextAudioKey, audio);
     if (audioKey && audioKey !== nextAudioKey)
-      await (env.FILES as R2Bucket).delete(audioKey);
+      await deleteAudio(audioKey);
     audioKey = nextAudioKey;
   }
   const storedPayload = { ...data, createdBy: existing.created_by };
@@ -84,7 +85,7 @@ export async function PUT(
       id,
     )
     .run();
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, id, audioKey });
 }
 export async function DELETE(
   request: Request,
@@ -93,10 +94,16 @@ export async function DELETE(
   const u = await user(request);
   if (!u?.canDelete)
     return Response.json({ error: 'Sem permissão' }, { status: 403 });
-  const { id } = await params;
+  const { id } = await params,
+    existing = await env.DB.prepare('SELECT audio_key FROM dailys WHERE id=?')
+      .bind(id)
+      .first<{ audio_key: string | null }>();
+  if (!existing)
+    return Response.json({ error: 'Daily não encontrada' }, { status: 404 });
   await (env.DB as D1Database)
     .prepare('DELETE FROM dailys WHERE id=?')
     .bind(id)
     .run();
+  if (existing.audio_key) await deleteAudio(existing.audio_key);
   return Response.json({ ok: true });
 }

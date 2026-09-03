@@ -621,10 +621,25 @@ export default function Home() {
         body: form,
         },
       );
-      if (!response.ok) throw new Error();
+      const result = (await response.json()) as {
+        id?: string;
+        audioKey?: string | null;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(result.error || 'Erro ao salvar');
+      if (result.id) setEditingId(result.id);
+      if (result.audioKey)
+        setAudioUrl(
+          `/api/audio/${result.audioKey
+            .split('/')
+            .map(encodeURIComponent)
+            .join('/')}`,
+        );
       setSaveStatus(editingId ? 'Daily atualizada' : 'Daily salva');
-    } catch {
-      setSaveStatus('Erro ao salvar');
+    } catch (error) {
+      setSaveStatus(
+        error instanceof Error ? error.message : 'Erro ao salvar',
+      );
     }
   };
   const returnToHome = () => {

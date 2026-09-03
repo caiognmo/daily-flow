@@ -1,24 +1,25 @@
 import { env } from 'cloudflare:workers';
+import type { AudioMetadata } from '@/lib/audio-storage';
+import {
+  isAllowedCompanyEmail,
+  requestEmail,
+} from '@/lib/request-identity';
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ key: string[] }> },
 ) {
-  const url = new URL(request.url),
-    local = ['localhost', '127.0.0.1'].includes(url.hostname),
-    email = (local
-      ? 'caio@sistemasbr.com.br'
-      : request.headers.get('cf-access-authenticated-user-email') ||
-        request.headers.get('oai-authenticated-user-email') || '').toLowerCase();
-  if (
-    !email.endsWith('@sistemasbr.net') &&
-    !email.endsWith('@sistemasbr.com.br')
-  )
+  const email = requestEmail(request);
+  if (!isAllowedCompanyEmail(email))
     return new Response('Não autorizado', { status: 401 });
   const { key } = await params,
-    obj = await (env.FILES as R2Bucket).get(key.join('/'));
-  if (!obj) return new Response('Não encontrado', { status: 404 });
-  const h = new Headers();
-  obj.writeHttpMetadata(h);
+    stored = await env.AUDIO_FILES.getWithMetadata<AudioMetadata>(
+      key.join('/'),
+      'stream',
+    );
+  if (!stored.value) return new Response('Não encontrado', { status: 404 });
+  const h = new Headers({
+    'content-type': stored.metadata?.contentType || 'audio/webm',
+  });
   h.set('cache-control', 'private, max-age=3600');
-  return new Response(obj.body, { headers: h });
+  return new Response(stored.value, { headers: h });
 }

@@ -5,6 +5,8 @@
   "main": "vinext/server/fetch-handler",
   "compatibility_date": "2026-09-02",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
@@ -17,10 +19,10 @@
       "database_id": "d8687b05-2b13-41de-8133-c9051a1accc9"
     }
   ],
-  "r2_buckets": [
+  "kv_namespaces": [
     {
-      "binding": "FILES",
-      "bucket_name": "sigedaily-audios"
+      "binding": "AUDIO_FILES",
+      "id": "ac600b77892c43ada077803b06ba297f"
     }
   ],
   "vars": {

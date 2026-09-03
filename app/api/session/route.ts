@@ -1,17 +1,11 @@
 import { env } from 'cloudflare:workers';
-const allowed = (email: string) =>
-  email.endsWith('@sistemasbr.net') || email.endsWith('@sistemasbr.com.br');
+import {
+  isAllowedCompanyEmail,
+  requestEmail,
+} from '@/lib/request-identity';
+
 export async function GET(request: Request) {
-  const url = new URL(request.url),
-    headers = request.headers;
-  const local = ['localhost', '127.0.0.1'].includes(url.hostname);
-  const email = (
-    local
-      ? 'caio@sistemasbr.com.br'
-      : headers.get('cf-access-authenticated-user-email') ||
-        headers.get('oai-authenticated-user-email') ||
-        ''
-  ).toLowerCase();
+  const email = requestEmail(request);
   const admins = (
     (env as unknown as Record<string, string>).ADMIN_EMAILS ||
     'caio@sistemasbr.com.br,caio@sistemasbr.net'
@@ -20,7 +14,7 @@ export async function GET(request: Request) {
     .split(',')
     .map((value) => value.trim());
   const isAdmin = admins.includes(email);
-  if (!email || !allowed(email))
+  if (!email || !isAllowedCompanyEmail(email))
     return Response.json({ authenticated: false }, { status: 401 });
   let permission = { canEdit: false, canDelete: false, enabled: true };
   if (isAdmin) permission = { canEdit: true, canDelete: true, enabled: true };
