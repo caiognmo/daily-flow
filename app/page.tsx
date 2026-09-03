@@ -34,6 +34,7 @@ import {
   Trash2,
   UserRound,
   Users,
+  Video,
 } from 'lucide-react';
 
 const plans = ['PDV', 'Básico', 'Controle', 'Avançado'];
@@ -67,6 +68,7 @@ const states = [
   ['TO', 'Tocantins'],
 ];
 type Employee = { name: string; role: string };
+type TrainingCall = { date: string; label: string; url: string };
 type FormData = {
   client: string;
   city: string;
@@ -75,6 +77,8 @@ type FormData = {
   customPlan: string;
   endDate: string;
   endDateText: string;
+  trainingMode: string;
+  trainingCalls: TrainingCall[];
   employees: Employee[];
   softwareMode: string;
   softwareName: string;
@@ -122,6 +126,8 @@ const initial: FormData = {
   customPlan: '',
   endDate: '',
   endDateText: '',
+  trainingMode: 'presential',
+  trainingCalls: [],
   employees: [{ name: '', role: '' }],
   softwareMode: '',
   softwareName: '',
@@ -130,6 +136,19 @@ const initial: FormData = {
   flowText: '',
 };
 const fmt = (v: string) => (v ? v.split('-').reverse().join('/') : '—');
+const trainingUrl = (value: string) => {
+  const raw = value.trim();
+  if (!raw) return '';
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const parsed = new URL(candidate);
+    return ['http:', 'https:'].includes(parsed.protocol)
+      ? parsed.toString()
+      : '';
+  } catch {
+    return '';
+  }
+};
 const audioUrlForKey = (key: string) =>
   `/api/audio/${key.split('/').map(encodeURIComponent).join('/')}`;
 const formatBytes = (bytes: number) => {
@@ -306,6 +325,27 @@ export default function Home() {
       'employees',
       data.employees.filter((_, i) => i !== index),
     );
+  const addTrainingCall = () =>
+    update('trainingCalls', [
+      ...(data.trainingCalls || []),
+      { date: '', label: '', url: '' },
+    ]);
+  const updateTrainingCall = (
+    index: number,
+    key: keyof TrainingCall,
+    value: string,
+  ) =>
+    update(
+      'trainingCalls',
+      (data.trainingCalls || []).map((call, callIndex) =>
+        callIndex === index ? { ...call, [key]: value } : call,
+      ),
+    );
+  const removeTrainingCall = (index: number) =>
+    update(
+      'trainingCalls',
+      (data.trainingCalls || []).filter((_, callIndex) => callIndex !== index),
+    );
   useEffect(() => {
     const controller = new AbortController();
     fetch('/api/session', { signal: controller.signal })
@@ -460,6 +500,23 @@ export default function Home() {
             customPlan: { type: 'string' },
             endDate: { type: 'string' },
             endDateText: { type: 'string' },
+            trainingMode: {
+              type: 'string',
+              enum: ['presential', 'online'],
+            },
+            trainingCalls: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  date: { type: 'string' },
+                  label: { type: 'string' },
+                  url: { type: 'string' },
+                },
+                required: ['url'],
+                additionalProperties: false,
+              },
+            },
             employee: { type: 'string' },
             role: { type: 'string' },
             softwareMode: {
@@ -565,6 +622,22 @@ export default function Home() {
         `${employee.name || 'Sem nome'}${employee.role ? ` (${employee.role})` : ''}`,
     )
     .join(', ');
+  const trainingModeLine =
+      data.trainingMode === 'online'
+        ? 'Online'
+        : data.trainingMode === 'presential'
+          ? 'Presencial'
+          : 'Não informado',
+    trainingCallsLine = (data.trainingCalls || [])
+      .filter((call) => call.date || call.label || call.url)
+      .map((call, index) => {
+        const details = [call.date ? fmt(call.date) : '', call.label]
+            .filter(Boolean)
+            .join(' — '),
+          url = trainingUrl(call.url) || call.url.trim();
+        return `${index + 1}. ${details || `Encontro ${index + 1}`}${url ? `\n${url}` : ''}`;
+      })
+      .join('\n');
   const clientLocation = [data.city, data.state].filter(Boolean).join('/'),
     reportLocation = [data.city, data.state].filter(Boolean).join(' - '),
     clientLine = [data.client, clientLocation && `(${clientLocation})`]
@@ -577,6 +650,10 @@ export default function Home() {
         `*Cliente:* ${clientLine || '—'}`,
         `*Criado por:* ${dailyCreator || homeSession?.email || '—'}`,
         `*Plano:* ${plan || '—'}`,
+        `*Modalidade do treinamento:* ${trainingModeLine}`,
+        ...(data.trainingMode === 'online'
+          ? [`*Links das calls:*\n${trainingCallsLine || '—'}`]
+          : []),
         `*Término do treinamento:* ${dateLine}`,
         `*Explicação sobre o fluxo de trabalho junto ao SIGECOM:* ${flow || '—'}`,
         `*Nivelamento dos funcionários:* ${employeesLine || '—'}`,
@@ -590,6 +667,8 @@ export default function Home() {
       clientLine,
       dateLine,
       employeesLine,
+      trainingModeLine,
+      trainingCallsLine,
       dailyCreator,
       homeSession?.email,
     ],
@@ -930,6 +1009,8 @@ export default function Home() {
             customPlan: current.customPlan || '',
             endDate: current.endDate || '',
             endDateText: current.endDateText || '',
+            trainingMode: current.trainingMode || 'presential',
+            trainingCalls: current.trainingCalls || [],
             employees:
               current.employees?.length > 0
                 ? current.employees
@@ -1159,6 +1240,158 @@ export default function Home() {
               <p className="lead">
                 Registre a data de término e todos que participaram.
               </p>
+              <fieldset className="training-mode-field">
+                <legend>Modalidade do treinamento</legend>
+                <div className="training-mode-choices">
+                  <Choice
+                    active={data.trainingMode === 'presential'}
+                    onClick={() => update('trainingMode', 'presential')}
+                  >
+                    Presencial
+                  </Choice>
+                  <Choice
+                    active={data.trainingMode === 'online'}
+                    onClick={() => {
+                      update('trainingMode', 'online');
+                      if (!(data.trainingCalls || []).length) addTrainingCall();
+                    }}
+                  >
+                    <Video /> Online
+                  </Choice>
+                </div>
+              </fieldset>
+              {data.trainingMode === 'online' && (
+                <section className="online-calls reveal">
+                  <div className="online-calls-head">
+                    <div>
+                      <b>Links do treinamento online</b>
+                      <small>
+                        Organize uma call para cada dia do treinamento.
+                      </small>
+                    </div>
+                    <span>
+                      {(data.trainingCalls || []).length}{' '}
+                      {(data.trainingCalls || []).length === 1
+                        ? 'encontro'
+                        : 'encontros'}
+                    </span>
+                  </div>
+                  <div className="training-call-list">
+                    {(data.trainingCalls || []).map((call, index) => {
+                      const callUrl = trainingUrl(call.url);
+                      return (
+                        <div className="training-call" key={index}>
+                          <div className="training-call-head">
+                            <span>
+                              <Video /> Dia {String(index + 1).padStart(2, '0')}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`Remover call do dia ${index + 1}`}
+                              onClick={() => removeTrainingCall(index)}
+                            >
+                              <Trash2 />
+                            </button>
+                          </div>
+                          <div className="training-call-grid">
+                            <label className="training-call-date">
+                              Data da call
+                              <div className="iconinput">
+                                <CalendarDays />
+                                <input
+                                  type="date"
+                                  value={call.date}
+                                  onChange={(event) =>
+                                    updateTrainingCall(
+                                      index,
+                                      'date',
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                              </div>
+                            </label>
+                            <div className="training-call-field">
+                              <label htmlFor={`training-call-label-${index}`}>
+                                Identificação opcional
+                              </label>
+                              <VoiceField
+                                label={`identificação da call ${index + 1}`}
+                                onTranscript={(text) =>
+                                  updateTrainingCall(
+                                    index,
+                                    'label',
+                                    mergeVoiceText(call.label, text),
+                                  )
+                                }
+                              >
+                                <input
+                                  id={`training-call-label-${index}`}
+                                  className="input"
+                                  placeholder="Ex: Treinamento do caixa"
+                                  value={call.label}
+                                  onChange={(event) =>
+                                    updateTrainingCall(
+                                      index,
+                                      'label',
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                              </VoiceField>
+                            </div>
+                            <div className="training-call-field training-call-link">
+                              <label htmlFor={`training-call-url-${index}`}>
+                                Link da call
+                              </label>
+                              <VoiceField
+                                label={`link da call ${index + 1}`}
+                                onTranscript={(text) =>
+                                  updateTrainingCall(index, 'url', text)
+                                }
+                              >
+                                <input
+                                  id={`training-call-url-${index}`}
+                                  className="input"
+                                  type="url"
+                                  inputMode="url"
+                                  autoCapitalize="none"
+                                  spellCheck={false}
+                                  placeholder="meet.google.com/..."
+                                  value={call.url}
+                                  onChange={(event) =>
+                                    updateTrainingCall(
+                                      index,
+                                      'url',
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                              </VoiceField>
+                              {callUrl && (
+                                <a
+                                  href={callUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <ExternalLink /> Conferir link
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    className="add-training-call"
+                    onClick={addTrainingCall}
+                  >
+                    <Plus /> Adicionar outro dia de treinamento
+                  </button>
+                </section>
+              )}
               <Label text="Término do treinamento — calendário ou texto" />
               <div className="cols datecols">
                 <div className="iconinput">
@@ -1400,6 +1633,36 @@ export default function Home() {
                     <b>Plano:</b> {plan || '—'}
                   </p>
                   <p>
+                    <b>Modalidade do treinamento:</b> {trainingModeLine}
+                  </p>
+                  {data.trainingMode === 'online' && (
+                    <div className="preview-training-calls">
+                      <b>Links das calls:</b>
+                      {(data.trainingCalls || []).some(
+                        (call) => call.date || call.label || call.url,
+                      ) ? (
+                        <ol>
+                          {(data.trainingCalls || [])
+                            .filter(
+                              (call) => call.date || call.label || call.url,
+                            )
+                            .map((call, index) => (
+                              <li key={index}>
+                                <span>
+                                  {[call.date ? fmt(call.date) : '', call.label]
+                                    .filter(Boolean)
+                                    .join(' — ') || `Encontro ${index + 1}`}
+                                </span>
+                                {call.url && <em>{call.url}</em>}
+                              </li>
+                            ))}
+                        </ol>
+                      ) : (
+                        ' —'
+                      )}
+                    </div>
+                  )}
+                  <p>
                     <b>Término do treinamento:</b> {dateLine}
                   </p>
                   <p>
@@ -1586,7 +1849,16 @@ function ReportView({ data }: { data: ReportPayload }) {
       .join(' — '),
     employees = (data.employees || [])
       .filter((e) => e.name || e.role)
-      .map((e) => `${e.name || 'Sem nome'}${e.role ? ` — ${e.role}` : ''}`);
+      .map((e) => `${e.name || 'Sem nome'}${e.role ? ` — ${e.role}` : ''}`),
+    reportTrainingMode =
+      data.trainingMode === 'online'
+        ? 'Online'
+        : data.trainingMode === 'presential'
+          ? 'Presencial'
+          : 'Não informado',
+    trainingCalls = (data.trainingCalls || []).filter(
+      (call) => call.date || call.label || call.url,
+    );
   const shareReportOnWhatsApp = () => {
     const shareLocation = [data.city, data.state].filter(Boolean).join(' - '),
       title = `Resumo / SigeDaily — ${data.client || 'Cliente'}${shareLocation ? ` (${shareLocation})` : ''}`,
@@ -1631,6 +1903,45 @@ function ReportView({ data }: { data: ReportPayload }) {
             <small>Término do treinamento</small>
             <strong>{data.endDateText || fmt(data.endDate)}</strong>
           </section>
+          <section className="wide">
+            <small>Modalidade do treinamento</small>
+            <strong>{reportTrainingMode}</strong>
+          </section>
+          {data.trainingMode === 'online' && (
+            <section className="wide report-training-calls">
+              <small>Links das calls do treinamento</small>
+              {trainingCalls.length ? (
+                <ol>
+                  {trainingCalls.map((call, index) => {
+                    const callUrl = trainingUrl(call.url);
+                    return (
+                      <li key={index}>
+                        <span>{String(index + 1).padStart(2, '0')}</span>
+                        <div>
+                          <b>
+                            {[call.date ? fmt(call.date) : '', call.label]
+                              .filter(Boolean)
+                              .join(' — ') || `Encontro ${index + 1}`}
+                          </b>
+                          {callUrl ? (
+                            <a href={callUrl} target="_blank" rel="noreferrer">
+                              <Link2 /> Abrir link da call
+                            </a>
+                          ) : call.url ? (
+                            <em>{call.url}</em>
+                          ) : (
+                            <em>Link não informado</em>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : (
+                <p>Nenhuma call informada.</p>
+              )}
+            </section>
+          )}
           <section className="wide">
             <small>Explicação sobre o fluxo de trabalho junto ao SIGECOM</small>
             <p>{flow || 'Não informado'}</p>
@@ -1816,6 +2127,24 @@ function DailyConsultation({
     const lines = [
       `Local: ${[d.city, d.state].filter(Boolean).join(' - ') || 'Não informado'}`,
       `Plano: ${d.plan === 'Outro' ? d.customPlan : d.plan}`,
+      `Modalidade: ${d.trainingMode === 'online' ? 'Online' : d.trainingMode === 'presential' ? 'Presencial' : 'Não informado'}`,
+      ...(d.trainingMode === 'online'
+        ? [
+            `Calls: ${
+              (d.trainingCalls || [])
+                .filter((call) => call.date || call.label || call.url)
+                .map(
+                  (call, index) =>
+                    `${index + 1}. ${
+                      [call.date ? fmt(call.date) : '', call.label]
+                        .filter(Boolean)
+                        .join(' - ') || `Encontro ${index + 1}`
+                    } ${trainingUrl(call.url) || call.url}`,
+                )
+                .join(' | ') || 'Não informado'
+            }`,
+          ]
+        : []),
       `Término: ${d.endDateText || fmt(d.endDate)}`,
       `Funcionários: ${(d.employees || []).map((e) => `${e.name} (${e.role})`).join(', ') || 'Não informado'}`,
       `Fluxo: ${d.flowText || 'Não informado'}`,
