@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "sigedaily",
+  "name": "app",
   "account_id": "1a79c1a9a38a5009fce1a6dfc9aa9e53",
   "main": "vinext/server/fetch-handler",
   "compatibility_date": "2026-09-02",
