@@ -32,7 +32,6 @@ import {
   UserRound,
   Users,
 } from 'lucide-react';
-import * as THREE from 'three';
 
 const plans = ['PDV', 'Básico', 'Controle', 'Avançado'];
 const states = [
@@ -128,6 +127,8 @@ const initial: FormData = {
   flowText: '',
 };
 const fmt = (v: string) => (v ? v.split('-').reverse().join('/') : '—');
+const audioUrlForKey = (key: string) =>
+  `/api/audio/${key.split('/').map(encodeURIComponent).join('/')}`;
 function Choice({
   active,
   children,
@@ -625,7 +626,7 @@ export default function Home() {
       'Áudio baixado. Agora anexe o arquivo na conversa do WhatsApp.',
     );
   };
-  const getReportLink = () => {
+  const getReportLink = (reportAudioUrl = audioUrl) => {
     const url = new URL(window.location.href);
     url.search = '';
     url.hash = '';
@@ -633,15 +634,20 @@ export default function Home() {
       'daily',
       JSON.stringify({
         ...data,
-        audioUrl: audioUrl || undefined,
+        audioUrl:
+          reportAudioUrl && !reportAudioUrl.startsWith('blob:')
+            ? reportAudioUrl
+            : undefined,
         createdBy: dailyCreator || homeSession?.email,
       }),
     );
     return url.toString();
   };
   const shareReport = async () => {
+    const reportAudioUrl = await ensureReportAudio();
+    if (reportAudioUrl === null) return;
     const reportTitle = `Resumo / SigeDaily — ${data.client || 'Cliente'}${reportLocation ? ` (${reportLocation})` : ''}`,
-      text = `*${reportTitle}*\n${getReportLink()}`;
+      text = `*${reportTitle}*\n${getReportLink(reportAudioUrl)}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: reportTitle, text });
@@ -655,7 +661,9 @@ export default function Home() {
     );
   };
   const copyReportLink = async () => {
-    await navigator.clipboard.writeText(getReportLink());
+    const reportAudioUrl = await ensureReportAudio();
+    if (reportAudioUrl === null) return;
+    await navigator.clipboard.writeText(getReportLink(reportAudioUrl));
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 1800);
   };
@@ -690,17 +698,39 @@ export default function Home() {
       };
       if (!response.ok) throw new Error(result.error || 'Erro ao salvar');
       if (result.id) setEditingId(result.id);
-      if (result.audioKey)
-        setAudioUrl(
-          `/api/audio/${result.audioKey
-            .split('/')
-            .map(encodeURIComponent)
-            .join('/')}`,
-        );
+      const persistedAudioUrl = result.audioKey
+        ? audioUrlForKey(result.audioKey)
+        : audioUrl.startsWith('blob:')
+          ? ''
+          : audioUrl;
+      setAudioUrl(persistedAudioUrl);
       setSaveStatus(editingId ? 'Daily atualizada' : 'Daily salva');
+      return persistedAudioUrl;
     } catch (error) {
       setSaveStatus(error instanceof Error ? error.message : 'Erro ao salvar');
+      return null;
     }
+  };
+  const ensureReportAudio = async () => {
+    if (!audioBlob || !audioUrl.startsWith('blob:')) return audioUrl;
+    const persistedAudioUrl = await saveDaily();
+    if (persistedAudioUrl === null) {
+      setAudioError(
+        'Não foi possível armazenar o áudio. Tente salvar a daily novamente.',
+      );
+    }
+    return persistedAudioUrl;
+  };
+  const openReport = async () => {
+    const reportWindow = window.open('', '_blank');
+    const reportAudioUrl = await ensureReportAudio();
+    if (reportAudioUrl === null) {
+      reportWindow?.close();
+      return;
+    }
+    if (reportWindow)
+      reportWindow.location.href = getReportLink(reportAudioUrl);
+    else window.location.href = getReportLink(reportAudioUrl);
   };
   const returnToHome = () => {
     setStarted(false);
@@ -741,20 +771,18 @@ export default function Home() {
             setAuthError('Não foi possível carregar o login Google.');
           }}
         />
-        <main className="welcome liquid-home">
-          <LiquidBackground />
+        <main className="welcome brand-home">
           <div className="brand-orbs" aria-hidden="true">
             <i />
             <i />
             <i />
             <i />
           </div>
-          <div className="liquid-vignette" />
           <div className="home-context">
             <span>Implantações</span>
             <b>Acompanhamento diário</b>
           </div>
-          <div className="daily-word" aria-hidden="true">
+          <div className="home-title" aria-hidden="true">
             SigeDaily
           </div>
           {homeSession && (
@@ -784,7 +812,7 @@ export default function Home() {
           ) : homeSession ? (
             <div className="home-actions">
               <button
-                className="start liquid-start"
+                className="start home-start"
                 onClick={() => setStarted(true)}
               >
                 Iniciar daily{' '}
@@ -1408,9 +1436,13 @@ export default function Home() {
                   {linkCopied ? <Check /> : <Clipboard />}
                   {linkCopied ? 'Link copiado' : 'Copiar link'}
                 </button>
-                <a href={getReportLink()} target="_blank" rel="noreferrer">
+                <button
+                  type="button"
+                  className="report-open"
+                  onClick={openReport}
+                >
                   <ExternalLink /> Visualizar
-                </a>
+                </button>
               </div>
               <button className="home-return" onClick={returnToHome}>
                 <House /> Voltar para a página inicial
@@ -1503,7 +1535,15 @@ function ReportView({ data }: { data: ReportPayload }) {
           {data.audioUrl && (
             <section className="wide report-audio">
               <small>Áudio da daily</small>
-              <audio controls src={data.audioUrl} />
+              <audio controls preload="metadata" src={data.audioUrl} />
+              <a
+                className="report-audio-open"
+                href={data.audioUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink /> Abrir ou baixar o áudio
+              </a>
               <p>Gravação anexada a este relatório.</p>
             </section>
           )}
@@ -1602,7 +1642,7 @@ function DailyConsultation({
   const payload = (row: DailyRow) => {
     const value = JSON.parse(row.payload) as ReportPayload;
     value.createdBy = row.created_by;
-    if (row.audio_key) value.audioUrl = `/api/audio/${row.audio_key}`;
+    if (row.audio_key) value.audioUrl = audioUrlForKey(row.audio_key);
     return value;
   };
   const link = (row: DailyRow) => {
@@ -1834,174 +1874,4 @@ function DailyConsultation({
       </section>
     </main>
   );
-}
-
-function LiquidBackground() {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    canvas.dataset.ready = 'false';
-    canvas.dataset.failed = 'false';
-    const mobileAtStart = innerWidth <= 640;
-    let renderer: THREE.WebGLRenderer;
-    try {
-      renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: !mobileAtStart,
-        alpha: false,
-        powerPreference: mobileAtStart ? 'default' : 'high-performance',
-      });
-    } catch {
-      canvas.dataset.failed = 'true';
-      return;
-    }
-    const scene = new THREE.Scene(),
-      camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
-      geometry = new THREE.PlaneGeometry(2, 2);
-    const source = document.createElement('canvas'),
-      sourceCtx = source.getContext('2d');
-    let texture = new THREE.CanvasTexture(source);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    const uniforms = {
-      uTexture: { value: texture },
-      uTime: { value: 0 },
-      uPointer: { value: new THREE.Vector2(0.5, 0.5) },
-      uTrail: { value: new THREE.Vector2(0.5, 0.5) },
-      uAspect: { value: 1 },
-      uMobile: { value: mobileAtStart ? 1 : 0 },
-    };
-    const material = new THREE.ShaderMaterial({
-      uniforms,
-      vertexShader: `varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position,1.0);}`,
-      fragmentShader: `precision highp float;varying vec2 vUv;uniform sampler2D uTexture;uniform float uTime;uniform float uAspect;uniform float uMobile;uniform vec2 uPointer;uniform vec2 uTrail;
-float water(vec2 p,float t){float a=sin(p.x*5.2+p.y*3.1+t*.55);float b=sin(p.x*3.4-p.y*5.8-t*.43);float c=sin((p.x+p.y)*8.0+t*.31);return (a+b*.68+c*.32)/2.0;}
-float caustic(vec2 p,float t){vec2 q=p+vec2(sin(p.y*5.0+t),cos(p.x*4.3-t))*.055;float a=sin(q.x*10.0+sin(q.y*8.0+t));float b=sin(q.y*11.0+cos(q.x*7.0-t*.7));return pow(max(0.0,1.0-abs(a-b)),12.0);}
-void main(){vec2 uv=vUv;vec2 p=uv-.5;p.x*=uAspect;vec2 mp=uPointer-.5;mp.x*=uAspect;vec2 tp=uTrail-.5;tp.x*=uAspect;float d=length(p-mp),dt=length(p-tp);float ring=sin(d*42.0-uTime*5.0)*exp(-d*6.0);float wake=sin(dt*31.0-uTime*3.6)*exp(-dt*7.5);float h=water(p*1.1,uTime),hx=water((p+vec2(.012,0.0))*1.1,uTime),hy=water((p+vec2(0.0,.012))*1.1,uTime);vec2 normal=vec2(hx-h,hy-h);vec2 dir=normalize(p-mp+vec2(.0001));float distortion=mix(1.0,.42,uMobile);vec2 refractUv=uv+normal*(.052*distortion)+dir*ring*(.035*distortion)+vec2(wake,-wake)*(.008*distortion);vec4 ink=texture2D(uTexture,refractUv);vec4 stableInk=texture2D(uTexture,uv);float letterMask=max(ink.a,stableInk.a*mix(0.0,.34,uMobile));float light=caustic(p*.9,uTime*.38);float glint=pow(max(0.0,normal.x-normal.y+.025),3.0)*mix(70.0,42.0,uMobile);vec3 base=mix(vec3(.72,.827,.855),vec3(.9,.95,.965),.48+h*.09);base+=vec3(.86,.97,1.0)*(light*.075+glint*.035);base+=exp(-d*10.0)*vec3(.035,.07,.09);vec3 letters=vec3(0.0,.286,.466)+vec3(.75,.93,1.0)*(light*.36+glint*.18)+ring*.08;float soft=texture2D(uTexture,refractUv+normal*.025).a;vec3 color=base-soft*.035;color=mix(color,letters,letterMask*.94);float vignette=smoothstep(1.12,.2,length(p));color*=.91+.09*vignette;gl_FragColor=vec4(color,1.0);}`,
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
-    let frame = 0,
-      running = true,
-      mobile = mobileAtStart,
-      lastFrame = 0,
-      firstRenderedFrame = false,
-      contextAvailable = true;
-    const target = new THREE.Vector2(0.5, 0.5);
-    const paint = () => {
-      if (!sourceCtx) return;
-      const ratio = mobile
-          ? Math.min(devicePixelRatio, 1.25)
-          : Math.min(devicePixelRatio, 2),
-        w = Math.max(1, Math.floor(innerWidth * ratio)),
-        h = Math.max(1, Math.floor(innerHeight * ratio));
-      source.width = w;
-      source.height = h;
-      sourceCtx.clearRect(0, 0, w, h);
-      sourceCtx.textAlign = 'center';
-      sourceCtx.textBaseline = 'middle';
-      const mobileFontSize =
-          Math.min(76, Math.max(58, innerWidth * 0.19)) * ratio,
-        fontSize = mobile ? mobileFontSize : Math.min(w * 0.175, h * 0.275);
-      sourceCtx.font = mobile
-        ? `750 ${fontSize}px ${getComputedStyle(document.body).fontFamily}`
-        : `900 ${fontSize}px Arial Black, Arial, sans-serif`;
-      sourceCtx.letterSpacing = mobile
-        ? `${fontSize * -0.07}px`
-        : `${Math.max(2, w * 0.004)}px`;
-      sourceCtx.fillStyle = 'rgba(22,25,24,.94)';
-      sourceCtx.fillText('SigeDaily', w / 2, h * (mobile ? 0.415 : 0.43));
-      texture.needsUpdate = true;
-    };
-    const resize = () => {
-      const nextMobile = innerWidth <= 640,
-        crossedResponsiveBreakpoint = nextMobile !== mobile;
-      mobile = nextMobile;
-      const ratio = mobile
-        ? Math.min(devicePixelRatio, 1.25)
-        : Math.min(devicePixelRatio, 2);
-      renderer.setPixelRatio(ratio);
-      renderer.setSize(innerWidth, innerHeight, false);
-      uniforms.uAspect.value = innerWidth / innerHeight;
-      uniforms.uMobile.value = mobile ? 1 : 0;
-      canvas.dataset.mode = mobile ? 'mobile-liquid' : 'desktop-liquid';
-      paint();
-      if (crossedResponsiveBreakpoint) {
-        const previousTexture = texture;
-        texture = new THREE.CanvasTexture(source);
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        uniforms.uTexture.value = texture;
-        previousTexture.dispose();
-      }
-    };
-    const contextLost = (event: Event) => {
-      event.preventDefault();
-      contextAvailable = false;
-      firstRenderedFrame = false;
-      canvas.dataset.ready = 'false';
-      canvas.dataset.failed = 'true';
-    };
-    const contextRestored = () => {
-      contextAvailable = true;
-      canvas.dataset.failed = 'false';
-      resize();
-    };
-    const move = (event: PointerEvent) => {
-      target.set(event.clientX / innerWidth, 1 - event.clientY / innerHeight);
-    };
-    const draw = (time: number) => {
-      if (!running) return;
-      if (!contextAvailable) {
-        frame = requestAnimationFrame(draw);
-        return;
-      }
-      if (mobile && time - lastFrame < 32) {
-        frame = requestAnimationFrame(draw);
-        return;
-      }
-      lastFrame = time;
-      uniforms.uTime.value = time * 0.00048;
-      uniforms.uTrail.value.lerp(uniforms.uPointer.value, 0.016);
-      uniforms.uPointer.value.lerp(target, 0.055);
-      try {
-        renderer.render(scene, camera);
-        if (!firstRenderedFrame) {
-          firstRenderedFrame = true;
-          canvas.dataset.ready = 'true';
-          canvas.dataset.failed = 'false';
-        }
-      } catch {
-        contextAvailable = false;
-        canvas.dataset.ready = 'false';
-        canvas.dataset.failed = 'true';
-      }
-      frame = requestAnimationFrame(draw);
-    };
-    resize();
-    canvas.dataset.engine = 'three.js realistic liquid refraction';
-    canvas.addEventListener('webglcontextlost', contextLost);
-    canvas.addEventListener('webglcontextrestored', contextRestored);
-    addEventListener('resize', resize);
-    addEventListener('pointermove', move, { passive: true });
-    addEventListener('pointerdown', move, { passive: true });
-    frame = requestAnimationFrame(draw);
-    return () => {
-      running = false;
-      cancelAnimationFrame(frame);
-      removeEventListener('resize', resize);
-      removeEventListener('pointermove', move);
-      removeEventListener('pointerdown', move);
-      canvas.removeEventListener('webglcontextlost', contextLost);
-      canvas.removeEventListener('webglcontextrestored', contextRestored);
-      geometry.dispose();
-      material.dispose();
-      texture.dispose();
-      renderer.dispose();
-    };
-  }, []);
-  return <canvas ref={ref} className="liquid-canvas" aria-hidden="true" />;
 }
