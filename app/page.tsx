@@ -1587,11 +1587,30 @@ function ReportView({ data }: { data: ReportPayload }) {
     employees = (data.employees || [])
       .filter((e) => e.name || e.role)
       .map((e) => `${e.name || 'Sem nome'}${e.role ? ` — ${e.role}` : ''}`);
+  const shareReportOnWhatsApp = () => {
+    const shareLocation = [data.city, data.state].filter(Boolean).join(' - '),
+      title = `Resumo / SigeDaily — ${data.client || 'Cliente'}${shareLocation ? ` (${shareLocation})` : ''}`,
+      text = `*${title}*\n${window.location.href}`;
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+  };
   return (
     <main className="public-report">
       <header>
         <Brand />
-        <span>RELATÓRIO DE IMPLANTAÇÃO</span>
+        <div className="public-report-actions">
+          <span>RELATÓRIO DE IMPLANTAÇÃO</span>
+          <button
+            type="button"
+            aria-label="Compartilhar relatório pelo WhatsApp"
+            onClick={shareReportOnWhatsApp}
+          >
+            <MessageCircle /> WhatsApp
+          </button>
+        </div>
       </header>
       <article>
         <div className="report-meta">
