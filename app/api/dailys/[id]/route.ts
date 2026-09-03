@@ -6,6 +6,8 @@ import {
   putAudio,
 } from '@/lib/audio-storage';
 import { isAllowedCompanyEmail, requestEmail } from '@/lib/request-identity';
+
+const textField = (value: unknown) => (typeof value === 'string' ? value : '');
 const user = async (request: Request) => {
   const email = await requestEmail(request),
     admins = (
@@ -27,6 +29,24 @@ const user = async (request: Request) => {
     ? { email, canEdit: !!p.can_edit, canDelete: !!p.can_delete }
     : null;
 };
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const email = await requestEmail(request);
+  if (!isAllowedCompanyEmail(email))
+    return Response.json({ error: 'Não autorizado' }, { status: 401 });
+  const { id } = await params,
+    saved = await (env.DB as D1Database)
+      .prepare(
+        'SELECT id,client,city,state,plan,end_date,payload,audio_key,created_by,created_at,updated_at FROM dailys WHERE id=?',
+      )
+      .bind(id)
+      .first();
+  if (!saved)
+    return Response.json({ error: 'Daily não encontrada' }, { status: 404 });
+  return Response.json(saved, { headers: { 'cache-control': 'no-store' } });
+}
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -46,10 +66,10 @@ export async function PUT(
     audio: FormDataEntryValue | null = null;
   if (contentType.includes('multipart/form-data')) {
     const form = await request.formData();
-    data = JSON.parse(String(form.get('payload') || '{}')) as Record<
-      string,
-      unknown
-    >;
+    const rawPayload = form.get('payload');
+    data = JSON.parse(
+      typeof rawPayload === 'string' ? rawPayload : '{}',
+    ) as Record<string, unknown>;
     audio = form.get('audio');
   } else data = (await request.json()) as Record<string, unknown>;
   let audioKey = existing.audio_key;
@@ -65,23 +85,43 @@ export async function PUT(
     audioKey = nextAudioKey;
   }
   const storedPayload = { ...data, createdBy: existing.created_by };
-  await (env.DB as D1Database)
+  const db = env.DB as D1Database,
+    write = await db
+      .prepare(
+        'UPDATE dailys SET client=?,city=?,state=?,plan=?,end_date=?,payload=?,audio_key=?,updated_at=? WHERE id=?',
+      )
+      .bind(
+        textField(data.client),
+        textField(data.city),
+        textField(data.state),
+        textField(data.plan),
+        textField(data.endDate) || textField(data.endDateText),
+        JSON.stringify(storedPayload),
+        audioKey,
+        Date.now(),
+        id,
+      )
+      .run();
+  if (!write.success || write.meta.changes !== 1)
+    return Response.json(
+      { error: 'Não foi possível confirmar a atualização da daily.' },
+      { status: 500 },
+    );
+  const saved = await db
     .prepare(
-      'UPDATE dailys SET client=?,city=?,state=?,plan=?,end_date=?,payload=?,audio_key=?,updated_at=? WHERE id=?',
+      'SELECT id,client,city,state,plan,end_date,payload,audio_key,created_by,created_at,updated_at FROM dailys WHERE id=?',
     )
-    .bind(
-      String(data.client || ''),
-      String(data.city || ''),
-      String(data.state || ''),
-      String(data.plan || ''),
-      String(data.endDate || data.endDateText || ''),
-      JSON.stringify(storedPayload),
-      audioKey,
-      Date.now(),
-      id,
-    )
-    .run();
-  return Response.json({ ok: true, id, audioKey });
+    .bind(id)
+    .first();
+  if (!saved)
+    return Response.json(
+      { error: 'A daily não apareceu na lista após a atualização.' },
+      { status: 500 },
+    );
+  return Response.json(
+    { ok: true, id, audioKey, saved: true, record: saved },
+    { headers: { 'cache-control': 'no-store' } },
+  );
 }
 export async function DELETE(
   request: Request,

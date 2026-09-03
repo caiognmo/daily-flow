@@ -1,6 +1,13 @@
 import { env } from 'cloudflare:workers';
-import { audioKeyFor, MAX_AUDIO_BYTES, putAudio } from '@/lib/audio-storage';
+import {
+  audioKeyFor,
+  deleteAudio,
+  MAX_AUDIO_BYTES,
+  putAudio,
+} from '@/lib/audio-storage';
 import { isAllowedCompanyEmail, requestEmail } from '@/lib/request-identity';
+
+const textField = (value: unknown) => (typeof value === 'string' ? value : '');
 
 export async function GET(request: Request) {
   const email = await requestEmail(request);
@@ -11,17 +18,19 @@ export async function GET(request: Request) {
       'SELECT id,client,city,state,plan,end_date,payload,audio_key,created_by,created_at,updated_at FROM dailys ORDER BY created_at DESC',
     )
     .all();
-  return Response.json(rows.results);
+  return Response.json(rows.results, {
+    headers: { 'cache-control': 'no-store' },
+  });
 }
 export async function POST(request: Request) {
   const email = await requestEmail(request);
   if (!isAllowedCompanyEmail(email))
     return Response.json({ error: 'Não autorizado' }, { status: 401 });
   const form = await request.formData(),
-    data = JSON.parse(String(form.get('payload') || '{}')) as Record<
-      string,
-      unknown
-    >,
+    rawPayload = form.get('payload'),
+    data = JSON.parse(
+      typeof rawPayload === 'string' ? rawPayload : '{}',
+    ) as Record<string, unknown>,
     audio = form.get('audio'),
     id = crypto.randomUUID(),
     now = Date.now();
@@ -35,23 +44,54 @@ export async function POST(request: Request) {
     audioKey = audioKeyFor(id, audio);
     await putAudio(audioKey, audio);
   }
-  await (env.DB as D1Database)
+  const db = env.DB as D1Database;
+  let write: D1Result;
+  try {
+    write = await db
+      .prepare(
+        'INSERT INTO dailys (id,client,city,state,plan,end_date,payload,audio_key,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      )
+      .bind(
+        id,
+        textField(data.client),
+        textField(data.city),
+        textField(data.state),
+        textField(data.plan),
+        textField(data.endDate) || textField(data.endDateText),
+        JSON.stringify({ ...data, createdBy: email }),
+        audioKey,
+        email,
+        now,
+        now,
+      )
+      .run();
+  } catch {
+    if (audioKey) await deleteAudio(audioKey);
+    return Response.json(
+      { error: 'Não foi possível confirmar a gravação da daily.' },
+      { status: 500 },
+    );
+  }
+  if (!write.success || write.meta.changes !== 1) {
+    if (audioKey) await deleteAudio(audioKey);
+    return Response.json(
+      { error: 'Não foi possível confirmar a gravação da daily.' },
+      { status: 500 },
+    );
+  }
+  const saved = await db
     .prepare(
-      'INSERT INTO dailys (id,client,city,state,plan,end_date,payload,audio_key,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      'SELECT id,client,city,state,plan,end_date,payload,audio_key,created_by,created_at,updated_at FROM dailys WHERE id=?',
     )
-    .bind(
-      id,
-      String(data.client || ''),
-      String(data.city || ''),
-      String(data.state || ''),
-      String(data.plan || ''),
-      String(data.endDate || data.endDateText || ''),
-      JSON.stringify({ ...data, createdBy: email }),
-      audioKey,
-      email,
-      now,
-      now,
-    )
-    .run();
-  return Response.json({ id, audioKey }, { status: 201 });
+    .bind(id)
+    .first();
+  if (!saved)
+    return Response.json(
+      { error: 'A daily não apareceu na lista após a gravação.' },
+      { status: 500 },
+    );
+  return Response.json(
+    { id, audioKey, saved: true, record: saved },
+    { status: 201, headers: { 'cache-control': 'no-store' } },
+  );
 }

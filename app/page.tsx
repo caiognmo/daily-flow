@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Script from 'next/script';
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   CalendarDays,
@@ -12,6 +13,7 @@ import {
   ExternalLink,
   FileDown,
   Filter,
+  HardDrive,
   House,
   Link2,
   LogOut,
@@ -129,6 +131,12 @@ const initial: FormData = {
 const fmt = (v: string) => (v ? v.split('-').reverse().join('/') : '—');
 const audioUrlForKey = (key: string) =>
   `/api/audio/${key.split('/').map(encodeURIComponent).join('/')}`;
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+};
 function Choice({
   active,
   children,
@@ -252,9 +260,14 @@ export default function Home() {
     [data, setData] = useState(initial),
     [copied, setCopied] = useState(false);
   const [consulting, setConsulting] = useState(false),
-    [saveStatus, setSaveStatus] = useState('');
+    [saveStatus, setSaveStatus] = useState(''),
+    [saving, setSaving] = useState(false),
+    [dailyDirty, setDailyDirty] = useState(true);
   const [reportData, setReportData] = useState<ReportPayload | null>(null),
-    [linkCopied, setLinkCopied] = useState(false);
+    [linkCopied, setLinkCopied] = useState(false),
+    [reportState, setReportState] = useState<'none' | 'loading' | 'error'>(
+      'none',
+    );
   const [cities, setCities] = useState<string[]>([]),
     [citiesLoading, setCitiesLoading] = useState(false);
   const [recording, setRecording] = useState(false),
@@ -263,7 +276,8 @@ export default function Home() {
     [audioSeconds, setAudioSeconds] = useState(0),
     [audioError, setAudioError] = useState('');
   const recorderRef = useRef<MediaRecorder | null>(null),
-    timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    timerRef = useRef<ReturnType<typeof setInterval> | null>(null),
+    savePromiseRef = useRef<Promise<string | null> | null>(null);
   const [homeSession, setHomeSession] = useState<SessionInfo | null>(null),
     [authLoading, setAuthLoading] = useState(true),
     [authError, setAuthError] = useState('');
@@ -272,8 +286,11 @@ export default function Home() {
     [wrongGoogleAccount, setWrongGoogleAccount] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null),
     [dailyCreator, setDailyCreator] = useState('');
-  const update = <K extends keyof FormData>(k: K, v: FormData[K]) =>
+  const update = <K extends keyof FormData>(k: K, v: FormData[K]) => {
+    setSaveStatus('');
+    setDailyDirty(true);
     setData((o) => ({ ...o, [k]: v }));
+  };
   const updateEmployee = (index: number, key: keyof Employee, value: string) =>
     update(
       'employees',
@@ -460,6 +477,7 @@ export default function Home() {
         execute: (input: unknown) => {
           if (!input || typeof input !== 'object')
             throw new Error('Dados inválidos');
+          setDailyDirty(true);
           setData((old) => ({ ...old, ...(input as Partial<FormData>) }));
           setStarted(true);
           setStep(4);
@@ -496,13 +514,38 @@ export default function Home() {
     return () => controller.abort();
   }, [data.state]);
   useEffect(() => {
-    const raw = new URLSearchParams(window.location.search).get('daily');
-    if (!raw) return;
-    try {
-      setReportData(JSON.parse(raw) as ReportPayload);
-    } catch {
-      setReportData(null);
+    const params = new URLSearchParams(window.location.search),
+      legacyReport = params.get('daily'),
+      reportId = params.get('r');
+    if (legacyReport) {
+      try {
+        setReportData(JSON.parse(legacyReport) as ReportPayload);
+      } catch {
+        setReportState('error');
+      }
+      return;
     }
+    if (!reportId) return;
+    const controller = new AbortController();
+    setReportState('loading');
+    fetch(`/api/reports/${encodeURIComponent(reportId)}`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Relatório não encontrado.');
+        return response.json() as Promise<ReportPayload>;
+      })
+      .then((report) => {
+        setReportData(report);
+        setReportState('none');
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return;
+        setReportState('error');
+      });
+    return () => controller.abort();
   }, []);
   const plan = data.plan === 'Outro' ? data.customPlan : data.plan;
   const software =
@@ -581,6 +624,8 @@ export default function Home() {
         });
         setAudioBlob(blob);
         setAudioUrl(URL.createObjectURL(blob));
+        setSaveStatus('');
+        setDailyDirty(true);
         stream.getTracks().forEach((t) => t.stop());
       };
       recorder.start();
@@ -626,28 +671,86 @@ export default function Home() {
       'Áudio baixado. Agora anexe o arquivo na conversa do WhatsApp.',
     );
   };
-  const getReportLink = (reportAudioUrl = audioUrl) => {
+  const getReportLink = (reportId: string) => {
     const url = new URL(window.location.href);
     url.search = '';
     url.hash = '';
-    url.searchParams.set(
-      'daily',
-      JSON.stringify({
-        ...data,
-        audioUrl:
-          reportAudioUrl && !reportAudioUrl.startsWith('blob:')
-            ? reportAudioUrl
-            : undefined,
-        createdBy: dailyCreator || homeSession?.email,
-      }),
-    );
+    url.searchParams.set('r', reportId);
     return url.toString();
   };
+  const saveDaily = () => {
+    if (savePromiseRef.current) return savePromiseRef.current;
+    setSaving(true);
+    const operation = (async () => {
+      try {
+        if (!data.client.trim() || !plan.trim())
+          throw new Error('Preencha o cliente e o plano antes de salvar.');
+        setSaveStatus('Salvando e confirmando...');
+        const form = new FormData();
+        form.append(
+          'payload',
+          JSON.stringify({
+            ...data,
+            createdBy: dailyCreator || homeSession?.email,
+          }),
+        );
+        if (audioBlob)
+          form.append(
+            'audio',
+            audioBlob,
+            `audio.${audioBlob.type.includes('mp4') ? 'm4a' : 'webm'}`,
+          );
+        const response = await fetch(
+          editingId ? `/api/dailys/${editingId}` : '/api/dailys',
+          {
+            method: editingId ? 'PUT' : 'POST',
+            body: form,
+          },
+        );
+        const result = (await response.json()) as {
+          id?: string;
+          audioKey?: string | null;
+          saved?: boolean;
+          error?: string;
+        };
+        if (!response.ok) throw new Error(result.error || 'Erro ao salvar');
+        if (!result.saved || !result.id)
+          throw new Error('O servidor não confirmou a daily na lista.');
+        setEditingId(result.id);
+        const persistedAudioUrl = result.audioKey
+          ? audioUrlForKey(result.audioKey)
+          : audioUrl.startsWith('blob:')
+            ? ''
+            : audioUrl;
+        setAudioUrl(persistedAudioUrl);
+        setDailyDirty(false);
+        setSaveStatus(
+          editingId ? 'Daily atualizada na lista' : 'Daily salva na lista',
+        );
+        return result.id;
+      } catch (error) {
+        setSaveStatus(
+          error instanceof Error ? error.message : 'Erro ao salvar',
+        );
+        return null;
+      }
+    })();
+    savePromiseRef.current = operation;
+    void operation.finally(() => {
+      savePromiseRef.current = null;
+      setSaving(false);
+    });
+    return operation;
+  };
+  const ensureSavedReport = async () => {
+    if (editingId && !dailyDirty) return editingId;
+    return saveDaily();
+  };
   const shareReport = async () => {
-    const reportAudioUrl = await ensureReportAudio();
-    if (reportAudioUrl === null) return;
+    const reportId = await ensureSavedReport();
+    if (!reportId) return;
     const reportTitle = `Resumo / SigeDaily — ${data.client || 'Cliente'}${reportLocation ? ` (${reportLocation})` : ''}`,
-      text = `*${reportTitle}*\n${getReportLink(reportAudioUrl)}`;
+      text = `*${reportTitle}*\n${getReportLink(reportId)}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: reportTitle, text });
@@ -661,76 +764,21 @@ export default function Home() {
     );
   };
   const copyReportLink = async () => {
-    const reportAudioUrl = await ensureReportAudio();
-    if (reportAudioUrl === null) return;
-    await navigator.clipboard.writeText(getReportLink(reportAudioUrl));
+    const reportId = await ensureSavedReport();
+    if (!reportId) return;
+    await navigator.clipboard.writeText(getReportLink(reportId));
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 1800);
   };
-  const saveDaily = async () => {
-    try {
-      setSaveStatus('Salvando...');
-      const form = new FormData();
-      form.append(
-        'payload',
-        JSON.stringify({
-          ...data,
-          createdBy: dailyCreator || homeSession?.email,
-        }),
-      );
-      if (audioBlob)
-        form.append(
-          'audio',
-          audioBlob,
-          `audio.${audioBlob.type.includes('mp4') ? 'm4a' : 'webm'}`,
-        );
-      const response = await fetch(
-        editingId ? `/api/dailys/${editingId}` : '/api/dailys',
-        {
-          method: editingId ? 'PUT' : 'POST',
-          body: form,
-        },
-      );
-      const result = (await response.json()) as {
-        id?: string;
-        audioKey?: string | null;
-        error?: string;
-      };
-      if (!response.ok) throw new Error(result.error || 'Erro ao salvar');
-      if (result.id) setEditingId(result.id);
-      const persistedAudioUrl = result.audioKey
-        ? audioUrlForKey(result.audioKey)
-        : audioUrl.startsWith('blob:')
-          ? ''
-          : audioUrl;
-      setAudioUrl(persistedAudioUrl);
-      setSaveStatus(editingId ? 'Daily atualizada' : 'Daily salva');
-      return persistedAudioUrl;
-    } catch (error) {
-      setSaveStatus(error instanceof Error ? error.message : 'Erro ao salvar');
-      return null;
-    }
-  };
-  const ensureReportAudio = async () => {
-    if (!audioBlob || !audioUrl.startsWith('blob:')) return audioUrl;
-    const persistedAudioUrl = await saveDaily();
-    if (persistedAudioUrl === null) {
-      setAudioError(
-        'Não foi possível armazenar o áudio. Tente salvar a daily novamente.',
-      );
-    }
-    return persistedAudioUrl;
-  };
   const openReport = async () => {
     const reportWindow = window.open('', '_blank');
-    const reportAudioUrl = await ensureReportAudio();
-    if (reportAudioUrl === null) {
+    const reportId = await ensureSavedReport();
+    if (!reportId) {
       reportWindow?.close();
       return;
     }
-    if (reportWindow)
-      reportWindow.location.href = getReportLink(reportAudioUrl);
-    else window.location.href = getReportLink(reportAudioUrl);
+    if (reportWindow) reportWindow.location.href = getReportLink(reportId);
+    else window.location.href = getReportLink(reportId);
   };
   const returnToHome = () => {
     setStarted(false);
@@ -744,6 +792,7 @@ export default function Home() {
     setAudioSeconds(0);
     setAudioError('');
     setSaveStatus('');
+    setDailyDirty(true);
     setCopied(false);
     setLinkCopied(false);
     window.scrollTo({ top: 0 });
@@ -758,6 +807,21 @@ export default function Home() {
     setAuthLoading(false);
     setAuthError('Sessão encerrada. Escolha uma conta Google para continuar.');
   };
+  if (reportState === 'loading')
+    return (
+      <main className="public-report report-state">
+        <span className="auth-spinner" />
+        <b>Carregando relatório...</b>
+      </main>
+    );
+  if (reportState === 'error')
+    return (
+      <main className="public-report report-state">
+        <AlertTriangle />
+        <b>Não foi possível abrir este relatório.</b>
+        <a href={window.location.pathname}>Voltar ao SigeDaily</a>
+      </main>
+    );
   if (reportData) return <ReportView data={reportData} />;
   if ((!started && !consulting) || !homeSession)
     return (
@@ -880,6 +944,7 @@ export default function Home() {
           setAudioUrl(current.audioUrl || '');
           setAudioBlob(null);
           setSaveStatus('');
+          setDailyDirty(false);
           setConsulting(false);
           setStarted(true);
           setStep(1);
@@ -1408,6 +1473,7 @@ export default function Home() {
                   setDailyCreator(homeSession.email);
                   setAudioUrl('');
                   setAudioBlob(null);
+                  setDailyDirty(true);
                 }}
               >
                 <RotateCcw /> Limpar e criar outra
@@ -1424,10 +1490,17 @@ export default function Home() {
                 <p>Armazene a daily antes de enviar ao suporte.</p>
               </div>
               <div className="report-link-actions">
-                <button className="save-daily" onClick={saveDaily}>
+                <button
+                  className="save-daily"
+                  onClick={saveDaily}
+                  disabled={saving}
+                  aria-busy={saving}
+                >
                   <CheckCircle2 />{' '}
-                  {saveStatus ||
-                    (editingId ? 'Atualizar daily' : 'Salvar daily')}
+                  {saving
+                    ? 'Salvando e confirmando...'
+                    : saveStatus ||
+                      (editingId ? 'Atualizar daily' : 'Salvar daily')}
                 </button>
                 <button className="send" onClick={shareReport}>
                   <Send /> Enviar resumo com link
@@ -1587,6 +1660,23 @@ type DailyRow = {
   created_by: string;
   created_at: number;
 };
+type StorageInfo = {
+  dailyCount: number;
+  estimatedDataBytes: number;
+  audioCount: number;
+  audioBytes: number;
+  audioLimitBytes: number;
+  audioPercent: number;
+  remainingAudioBytes: number;
+  warning: 'ok' | 'warning' | 'critical';
+  selection: null | {
+    from: string;
+    to: string;
+    dailyCount: number;
+    audioCount: number;
+    audioBytes: number;
+  };
+};
 function DailyConsultation({
   onBack,
   onEdit,
@@ -1610,6 +1700,10 @@ function DailyConsultation({
     [canDelete, setCanDelete] = useState(false),
     [enabled, setEnabled] = useState(true),
     [notice, setNotice] = useState('');
+  const [storage, setStorage] = useState<StorageInfo | null>(null),
+    [cleanupFrom, setCleanupFrom] = useState(''),
+    [cleanupTo, setCleanupTo] = useState(''),
+    [cleaning, setCleaning] = useState(false);
   const load = async () => {
     try {
       setLoading(true);
@@ -1617,9 +1711,16 @@ function DailyConsultation({
       if (!s.ok) throw new Error('Acesso restrito às contas SistemasBR.');
       const info = (await s.json()) as SessionInfo;
       setSession(info);
-      const response = await fetch('/api/dailys');
+      const response = await fetch('/api/dailys', { cache: 'no-store' });
       if (!response.ok) throw new Error('Não foi possível carregar as dailys.');
       setRows((await response.json()) as DailyRow[]);
+      if (info.isAdmin) {
+        const storageResponse = await fetch('/api/admin/storage', {
+          cache: 'no-store',
+        });
+        if (storageResponse.ok)
+          setStorage((await storageResponse.json()) as StorageInfo);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar');
     } finally {
@@ -1648,7 +1749,7 @@ function DailyConsultation({
   const link = (row: DailyRow) => {
     const url = new URL(window.location.href);
     url.search = '';
-    url.searchParams.set('daily', JSON.stringify(payload(row)));
+    url.searchParams.set('r', row.id);
     return url.toString();
   };
   const remove = async (row: DailyRow) => {
@@ -1706,6 +1807,70 @@ function DailyConsultation({
         : 'Não foi possível atualizar as permissões.',
     );
   };
+  const previewCleanup = async () => {
+    if (!cleanupFrom || !cleanupTo) {
+      setNotice('Informe as datas inicial e final da limpeza.');
+      return;
+    }
+    const params = new URLSearchParams({ from: cleanupFrom, to: cleanupTo }),
+      response = await fetch(`/api/admin/storage?${params}`, {
+        cache: 'no-store',
+      });
+    if (!response.ok) {
+      setNotice('Não foi possível calcular o período selecionado.');
+      return;
+    }
+    setStorage((await response.json()) as StorageInfo);
+    setNotice('Período calculado. Confira antes de excluir.');
+  };
+  const cleanupPeriod = async () => {
+    const selection = storage?.selection;
+    if (!selection?.dailyCount) return;
+    if (
+      !confirm(
+        `Excluir definitivamente ${selection.dailyCount} daily(s) e ${selection.audioCount} áudio(s), de ${selection.from} até ${selection.to}?`,
+      )
+    )
+      return;
+    setCleaning(true);
+    let deleted = 0,
+      remaining = selection.dailyCount,
+      attempts = 0;
+    try {
+      while (remaining > 0 && attempts < 100) {
+        const response = await fetch('/api/admin/storage', {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ from: cleanupFrom, to: cleanupTo }),
+        });
+        const result = (await response.json()) as {
+          deleted?: number;
+          remaining?: number;
+          error?: string;
+        };
+        if (!response.ok)
+          throw new Error(result.error || 'Não foi possível limpar o período.');
+        deleted += Number(result.deleted || 0);
+        remaining = Number(result.remaining || 0);
+        attempts += 1;
+        if (!result.deleted && remaining) break;
+      }
+      setNotice(
+        remaining
+          ? `${deleted} dailys excluídas; ${remaining} ainda aguardam limpeza.`
+          : `${deleted} dailys e seus áudios foram excluídos do período.`,
+      );
+      setCleanupFrom('');
+      setCleanupTo('');
+      await load();
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : 'Erro ao limpar o período.',
+      );
+    } finally {
+      setCleaning(false);
+    }
+  };
   return (
     <main className="consult-page">
       <header>
@@ -1730,10 +1895,23 @@ function DailyConsultation({
           </div>
           {session?.isAdmin && (
             <button onClick={() => setShowPermissions(!showPermissions)}>
-              <Settings2 /> Gerenciar acessos
+              <Settings2 /> Administração
             </button>
           )}
         </div>
+        {session?.isAdmin && storage?.warning !== 'ok' && (
+          <div className={`storage-warning ${storage?.warning || ''}`}>
+            <AlertTriangle />
+            <span>
+              <b>Armazenamento de áudios próximo do limite</b>
+              <small>
+                Restam aproximadamente{' '}
+                {formatBytes(storage?.remainingAudioBytes || 0)}. Abra a
+                administração para fazer uma limpeza por período.
+              </small>
+            </span>
+          </div>
+        )}
         {showPermissions && (
           <section className="permission-card">
             <div>
@@ -1773,6 +1951,87 @@ function DailyConsultation({
               Pode excluir
             </label>
             <button onClick={savePermission}>Salvar permissões</button>
+          </section>
+        )}
+        {showPermissions && session?.isAdmin && storage && (
+          <section className={`storage-card ${storage.warning}`}>
+            <div className="storage-head">
+              <span>
+                <HardDrive />
+              </span>
+              <div>
+                <b>Armazenamento do SigeDaily</b>
+                <small>
+                  {storage.dailyCount} dailys • {storage.audioCount} áudios
+                </small>
+              </div>
+              <strong>{storage.audioPercent.toFixed(1)}%</strong>
+            </div>
+            <div className="storage-progress" aria-label="Uso do armazenamento">
+              <i style={{ width: `${storage.audioPercent}%` }} />
+            </div>
+            <div className="storage-summary">
+              <div>
+                <small>Áudios armazenados</small>
+                <strong>{formatBytes(storage.audioBytes)} de 1 GB</strong>
+              </div>
+              <div>
+                <small>Espaço restante</small>
+                <strong>{formatBytes(storage.remainingAudioBytes)}</strong>
+              </div>
+              <div>
+                <small>Dados dos relatórios</small>
+                <strong>{formatBytes(storage.estimatedDataBytes)}</strong>
+              </div>
+            </div>
+            <div className="storage-cleanup">
+              <div>
+                <b>Limpar dailys por período</b>
+                <small>A prévia mostra exatamente o que será excluído.</small>
+              </div>
+              <div className="storage-fields">
+                <label>
+                  De
+                  <input
+                    type="date"
+                    value={cleanupFrom}
+                    onChange={(event) => setCleanupFrom(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Até
+                  <input
+                    type="date"
+                    value={cleanupTo}
+                    onChange={(event) => setCleanupTo(event.target.value)}
+                  />
+                </label>
+                <button
+                  className="storage-preview-button"
+                  onClick={previewCleanup}
+                >
+                  Calcular período
+                </button>
+              </div>
+            </div>
+            {storage.selection && (
+              <div className="storage-selection">
+                <span>
+                  <b>{storage.selection.dailyCount} dailys</b>
+                  <small>
+                    {storage.selection.audioCount} áudios •{' '}
+                    {formatBytes(storage.selection.audioBytes)}
+                  </small>
+                </span>
+                <button
+                  className="storage-delete"
+                  onClick={cleanupPeriod}
+                  disabled={cleaning || !storage.selection.dailyCount}
+                >
+                  <Trash2 /> {cleaning ? 'Excluindo...' : 'Excluir período'}
+                </button>
+              </div>
+            )}
           </section>
         )}
         <section className="filters">
