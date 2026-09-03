@@ -1822,14 +1822,19 @@ export default function Home() {
 }
 function Brand({ welcome = false }: { welcome?: boolean }) {
   return (
-    <div className={welcome ? 'welcomebrand' : 'brand'}>
+    <a
+      className={welcome ? 'welcomebrand' : 'brand'}
+      href="/"
+      aria-label="Voltar para a página inicial do SigeDaily"
+      title="Voltar para a página inicial"
+    >
       <span>
         <Radio />
       </span>{' '}
       <b>
         SigeDaily<small>Implantações SIGECOM</small>
       </b>
-    </div>
+    </a>
   );
 }
 function Label({ text }: { text: string }) {
