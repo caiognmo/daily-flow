@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Script from 'next/script';
 import { DateField } from '@/components/date-field';
 import { handleFieldEnter } from '@/lib/form-keyboard';
+import { shareSavedDaily } from '@/lib/share-saved-daily';
+import { Button } from '@/components/ui/button';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -27,6 +29,7 @@ import {
   Printer,
   Radio,
   RotateCcw,
+  Save,
   Search,
   Send,
   Settings2,
@@ -286,6 +289,13 @@ export default function Home() {
     [saveStatus, setSaveStatus] = useState(''),
     [saving, setSaving] = useState(false),
     [dailyDirty, setDailyDirty] = useState(true);
+  const [saveOutcome, setSaveOutcome] = useState<'idle' | 'success' | 'error'>(
+    'idle',
+  );
+  const [sharing, setSharing] = useState(false),
+    [shareFallback, setShareFallback] = useState(''),
+    [deliveryError, setDeliveryError] = useState('');
+  const [processingAudio, setProcessingAudio] = useState(false);
   const [reportData, setReportData] = useState<ReportPayload | null>(null),
     [linkCopied, setLinkCopied] = useState(false),
     [reportState, setReportState] = useState<'none' | 'loading' | 'error'>(
@@ -321,6 +331,8 @@ export default function Home() {
   };
   const update = <K extends keyof FormData>(k: K, v: FormData[K]) => {
     setSaveStatus('');
+    setSaveOutcome('idle');
+    setShareFallback('');
     setDailyDirty(true);
     setData((o) => ({ ...o, [k]: v }));
   };
@@ -693,24 +705,21 @@ export default function Home() {
     ],
   );
   const copy = async () => {
-    await navigator.clipboard.writeText(message);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
-  };
-  const share = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'Resumo do SigeDaily', text: message });
-        return;
-      } catch {}
+    setDeliveryError('');
+    const reportId = await ensureSavedReport();
+    if (!reportId) return;
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setDeliveryError(
+        'A daily foi gravada, mas o navegador não permitiu copiar a mensagem. Use o botão de compartilhar.',
+      );
     }
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(message)}`,
-      '_blank',
-      'noopener,noreferrer',
-    );
   };
   const startRecording = async () => {
+    setProcessingAudio(true);
     try {
       setAudioError('');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -724,27 +733,35 @@ export default function Home() {
         setAudioBlob(blob);
         setAudioUrl(URL.createObjectURL(blob));
         setSaveStatus('');
+        setSaveOutcome('idle');
+        setShareFallback('');
         setDailyDirty(true);
+        setProcessingAudio(false);
         stream.getTracks().forEach((t) => t.stop());
       };
       recorder.start();
       recorderRef.current = recorder;
       setRecording(true);
+      setProcessingAudio(false);
       setAudioSeconds(0);
       timerRef.current = setInterval(() => setAudioSeconds((s) => s + 1), 1000);
     } catch {
+      setProcessingAudio(false);
       setAudioError(
         'Não foi possível acessar o microfone. Verifique a permissão do navegador.',
       );
     }
   };
   const stopRecording = () => {
+    setProcessingAudio(true);
     recorderRef.current?.stop();
     setRecording(false);
     if (timerRef.current) clearInterval(timerRef.current);
   };
   const shareAudio = async () => {
     if (!audioBlob) return;
+    const reportId = await ensureSavedReport();
+    if (!reportId) return;
     const ext = audioBlob.type.includes('mp4') ? 'm4a' : 'webm',
       file = new File(
         [audioBlob],
@@ -779,7 +796,22 @@ export default function Home() {
   };
   const saveDaily = () => {
     if (savePromiseRef.current) return savePromiseRef.current;
+    if (recording || processingAudio) {
+      setSaveOutcome('error');
+      setSaveStatus(
+        'Finalize a gravação do áudio antes de salvar ou compartilhar.',
+      );
+      return Promise.resolve(null);
+    }
+    if (editingId && !dailyDirty) {
+      setSaveOutcome('success');
+      setSaveStatus('Daily gravada com sucesso!');
+      return Promise.resolve(editingId);
+    }
     setSaving(true);
+    setSaveOutcome('idle');
+    setDeliveryError('');
+    setShareFallback('');
     const operation = (async () => {
       try {
         if (!data.client.trim() || !plan.trim())
@@ -823,11 +855,11 @@ export default function Home() {
             : audioUrl;
         setAudioUrl(persistedAudioUrl);
         setDailyDirty(false);
-        setSaveStatus(
-          editingId ? 'Daily atualizada na lista' : 'Daily salva na lista',
-        );
+        setSaveOutcome('success');
+        setSaveStatus('Daily gravada com sucesso!');
         return result.id;
       } catch (error) {
+        setSaveOutcome('error');
         setSaveStatus(
           error instanceof Error ? error.message : 'Erro ao salvar',
         );
@@ -842,32 +874,58 @@ export default function Home() {
     return operation;
   };
   const ensureSavedReport = async () => {
-    if (editingId && !dailyDirty) return editingId;
+    if (editingId && !dailyDirty && !recording && !processingAudio) {
+      setSaveOutcome('success');
+      setSaveStatus('Daily gravada com sucesso!');
+      return editingId;
+    }
     return saveDaily();
   };
-  const shareReport = async () => {
-    const reportId = await ensureSavedReport();
-    if (!reportId) return;
-    const reportTitle = `Resumo / SigeDaily — ${data.client || 'Cliente'}${reportLocation ? ` (${reportLocation})` : ''}`,
-      text = `*${reportTitle}*\n${getReportLink(reportId)}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: reportTitle, text });
-        return;
-      } catch {}
+  const shareDaily = async (mode: 'link' | 'text') => {
+    if (sharing || saving || recording || processingAudio) return;
+    setSharing(true);
+    setShareFallback('');
+    setDeliveryError('');
+    try {
+      await shareSavedDaily({
+        save: ensureSavedReport,
+        getText: (reportId) =>
+          mode === 'text'
+            ? message
+            : `*Resumo / SigeDaily — ${data.client || 'Cliente'}${reportLocation ? ` (${reportLocation})` : ''}*\n${getReportLink(reportId)}`,
+        openWindow: () => {
+          const target = window.open('', '_blank');
+          if (target) {
+            target.opener = null;
+            target.document.title = 'SigeDaily — preparando compartilhamento';
+            target.document.body.textContent =
+              'Salvando sua daily com segurança. O WhatsApp será aberto após a confirmação.';
+          }
+          return target;
+        },
+        onFallback: setShareFallback,
+      });
+    } catch {
+      setDeliveryError(
+        'Não foi possível abrir o compartilhamento. Confira a confirmação de gravação e tente novamente.',
+      );
+    } finally {
+      setSharing(false);
     }
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(text)}`,
-      '_blank',
-      'noopener,noreferrer',
-    );
   };
   const copyReportLink = async () => {
+    setDeliveryError('');
     const reportId = await ensureSavedReport();
     if (!reportId) return;
-    await navigator.clipboard.writeText(getReportLink(reportId));
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 1800);
+    try {
+      await navigator.clipboard.writeText(getReportLink(reportId));
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1800);
+    } catch {
+      setDeliveryError(
+        'A daily foi gravada, mas o navegador não permitiu copiar o link. Use o botão de compartilhar.',
+      );
+    }
   };
   const openReport = async () => {
     const reportWindow = window.open('', '_blank');
@@ -891,6 +949,9 @@ export default function Home() {
     setAudioSeconds(0);
     setAudioError('');
     setSaveStatus('');
+    setSaveOutcome('idle');
+    setShareFallback('');
+    setDeliveryError('');
     setDailyDirty(true);
     setCopied(false);
     setLinkCopied(false);
@@ -1058,6 +1119,7 @@ export default function Home() {
     Boolean(
       data.client && data.plan && (data.plan !== 'Outro' || data.customPlan),
     );
+  const actionBusy = saving || sharing || recording || processingAudio;
   const stepLabels = [
     'Cliente e plano',
     'Dados do treinamento',
@@ -1079,6 +1141,7 @@ export default function Home() {
               key={n}
               className={`navstep ${step === i + 1 ? 'current' : ''} ${step > i + 1 ? 'done' : ''}`}
               aria-current={step === i + 1 ? 'step' : undefined}
+              disabled={saving || sharing}
               onClick={() => goToStep(i + 1)}
             >
               <span>{step > i + 1 ? <Check size={14} /> : n}</span>
@@ -1648,7 +1711,7 @@ export default function Home() {
                   </div>
                   <h2 tabIndex={-1}>Revisão e envio</h2>
                   <p className="lead">
-                    Sua mensagem já está formatada para o WhatsApp.
+                    Confira a daily, salve e envie ao suporte por link ou texto.
                   </p>
                 </div>
                 <CheckCircle2 className="success" />
@@ -1728,7 +1791,11 @@ export default function Home() {
                   </small>
                 </div>
                 {!recording && !audioUrl && (
-                  <button className="record" onClick={startRecording}>
+                  <button
+                    className="record"
+                    disabled={saving || sharing || processingAudio}
+                    onClick={startRecording}
+                  >
                     <span />
                     <b>Gravar áudio</b>
                   </button>
@@ -1742,7 +1809,7 @@ export default function Home() {
                 {audioUrl && (
                   <div className="audioresult">
                     <audio controls src={audioUrl} />
-                    <button onClick={shareAudio}>
+                    <button onClick={shareAudio} disabled={saving || sharing}>
                       <Send /> Enviar áudio
                     </button>
                     <a
@@ -1753,10 +1820,15 @@ export default function Home() {
                     </a>
                     <button
                       className="redo"
+                      disabled={saving || sharing}
                       onClick={() => {
                         setAudioUrl('');
                         setAudioBlob(null);
                         setAudioSeconds(0);
+                        setSaveStatus('');
+                        setSaveOutcome('idle');
+                        setShareFallback('');
+                        setDailyDirty(true);
                       }}
                     >
                       <RotateCcw /> Refazer
@@ -1765,76 +1837,218 @@ export default function Home() {
                 )}
                 {audioError && <p className="audioerror">{audioError}</p>}
               </section>
-              <div className="actions">
-                <button className="send" onClick={share}>
-                  <Send /> Compartilhar texto no WhatsApp
-                </button>
-                <button className="copy" onClick={copy}>
-                  {copied ? <Check /> : <Clipboard />}
-                  {copied ? 'Copiado' : 'Copiar mensagem'}
-                </button>
-              </div>
-              <button
-                className="reset"
-                onClick={() => {
-                  setData(initial);
-                  setStep(1);
-                  setEditingId(null);
-                  setDailyCreator(homeSession.email);
-                  setAudioUrl('');
-                  setAudioBlob(null);
-                  setDailyDirty(true);
-                }}
+              <section
+                className="daily-save-card"
+                aria-labelledby="daily-save-title"
               >
-                <RotateCcw /> Limpar e criar outra
-              </button>
-            </section>
-          )}
-          {step === 4 && (
-            <section className="report-link-card">
-              <div className="report-link-icon">
-                <Link2 />
-              </div>
-              <div>
-                <b>Salvar e compartilhar</b>
-                <p>Armazene a daily antes de enviar ao suporte.</p>
-              </div>
-              <div className="report-link-actions">
-                <button
-                  className="save-daily"
+                <div className="daily-save-heading">
+                  <ShieldCheck aria-hidden="true" />
+                  <div>
+                    <h3 id="daily-save-title">Salve sua daily</h3>
+                    <p>
+                      Ela ficará disponível na consulta. Ao compartilhar por
+                      link ou texto, a gravação também é automática.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  className="save-daily save-daily-primary"
                   onClick={saveDaily}
-                  disabled={saving}
+                  disabled={actionBusy || Boolean(editingId && !dailyDirty)}
                   aria-busy={saving}
                 >
-                  <CheckCircle2 />{' '}
+                  {editingId && !dailyDirty ? <CheckCircle2 /> : <Save />}
                   {saving
-                    ? 'Salvando e confirmando...'
-                    : saveStatus ||
-                      (editingId ? 'Atualizar daily' : 'Salvar daily')}
-                </button>
-                <button className="send" onClick={shareReport}>
-                  <Send /> Enviar resumo com link
-                </button>
-                <button className="copy" onClick={copyReportLink}>
-                  {linkCopied ? <Check /> : <Clipboard />}
-                  {linkCopied ? 'Link copiado' : 'Copiar link'}
+                    ? 'Salvando daily...'
+                    : editingId && !dailyDirty
+                      ? 'Daily gravada'
+                      : editingId
+                        ? 'Salvar alterações'
+                        : 'Salvar daily'}
+                </Button>
+                {(recording || processingAudio) && (
+                  <p className="daily-save-hint">
+                    {recording
+                      ? 'Pare a gravação do áudio para salvar e compartilhar.'
+                      : 'Preparando o áudio para salvar...'}
+                  </p>
+                )}
+                {saveStatus && (
+                  <div
+                    className={`daily-save-feedback ${saveOutcome}`}
+                    role={saveOutcome === 'error' ? 'alert' : 'status'}
+                    aria-live={saveOutcome === 'error' ? 'assertive' : 'polite'}
+                    aria-atomic="true"
+                  >
+                    {saveOutcome === 'success' ? (
+                      <CheckCircle2 />
+                    ) : saveOutcome === 'error' ? (
+                      <AlertTriangle />
+                    ) : (
+                      <Save />
+                    )}
+                    <div>
+                      <strong>{saveStatus}</strong>
+                      {saveOutcome === 'success' && (
+                        <span>
+                          Já está na lista de dailys, pronta para consultar e
+                          compartilhar.
+                        </span>
+                      )}
+                      {saveOutcome === 'error' && (
+                        <span>
+                          O compartilhamento só será liberado após confirmar a
+                          gravação. Corrija o problema e tente novamente.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </section>
+              <section
+                className="daily-share-option daily-share-link"
+                aria-labelledby="share-link-title"
+              >
+                <div className="daily-share-heading">
+                  <span className="daily-share-number">1</span>
+                  <div>
+                    <h3 id="share-link-title">Compartilhar por link</h3>
+                    <p>
+                      Envie o cliente, a cidade/UF e o link do relatório
+                      completo, com o áudio.
+                    </p>
+                  </div>
+                  <span className="recommended-badge">Recomendado</span>
+                </div>
+                <div className="daily-share-actions">
+                  <Button
+                    type="button"
+                    className="send share-link-primary"
+                    disabled={actionBusy}
+                    onClick={() => shareDaily('link')}
+                  >
+                    <MessageCircle />{' '}
+                    {dailyDirty
+                      ? 'Salvar e enviar link no WhatsApp'
+                      : 'Enviar link no WhatsApp'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="share-utility"
+                    disabled={actionBusy}
+                    onClick={copyReportLink}
+                  >
+                    {linkCopied ? <Check /> : <Link2 />}
+                    {linkCopied ? 'Link copiado' : 'Copiar link'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="share-utility"
+                    disabled={actionBusy}
+                    onClick={openReport}
+                  >
+                    <ExternalLink /> Visualizar relatório
+                  </Button>
+                </div>
+              </section>
+              <section
+                className="daily-share-option daily-share-text"
+                aria-labelledby="share-text-title"
+              >
+                <div className="daily-share-heading">
+                  <span className="daily-share-number">2</span>
+                  <div>
+                    <h3 id="share-text-title">Compartilhar como texto</h3>
+                    <p>
+                      Alternativa: envie a mensagem completa diretamente na
+                      conversa.
+                    </p>
+                  </div>
+                </div>
+                <div className="daily-text-actions">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="share-utility"
+                    disabled={actionBusy}
+                    onClick={() => shareDaily('text')}
+                  >
+                    <Send />{' '}
+                    {dailyDirty
+                      ? 'Salvar e enviar texto no WhatsApp'
+                      : 'Enviar texto no WhatsApp'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="share-utility"
+                    disabled={actionBusy}
+                    onClick={copy}
+                  >
+                    {copied ? <Check /> : <Clipboard />}
+                    {copied ? 'Mensagem copiada' : 'Copiar mensagem'}
+                  </Button>
+                </div>
+              </section>
+              {shareFallback && (
+                <div className="share-fallback" role="status">
+                  <p>
+                    A daily foi gravada. O navegador bloqueou a nova janela; use
+                    o botão abaixo para continuar.
+                  </p>
+                  <a
+                    href={shareFallback}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <MessageCircle /> Abrir WhatsApp
+                  </a>
+                </div>
+              )}
+              {deliveryError && (
+                <p className="delivery-error" role="alert">
+                  {deliveryError}
+                </p>
+              )}
+              <div className="daily-finish-navigation">
+                <button
+                  className="home-return"
+                  disabled={saving || sharing}
+                  onClick={returnToHome}
+                >
+                  <House /> Voltar para a página inicial
                 </button>
                 <button
-                  type="button"
-                  className="report-open"
-                  onClick={openReport}
+                  className="reset"
+                  disabled={actionBusy}
+                  onClick={() => {
+                    setData(initial);
+                    goToStep(1);
+                    setEditingId(null);
+                    setDailyCreator(homeSession.email);
+                    setAudioUrl('');
+                    setAudioBlob(null);
+                    setDailyDirty(true);
+                    setSaveStatus('');
+                    setSaveOutcome('idle');
+                    setShareFallback('');
+                    setDeliveryError('');
+                    setCopied(false);
+                    setLinkCopied(false);
+                  }}
                 >
-                  <ExternalLink /> Visualizar
+                  <RotateCcw /> Limpar e criar outra
                 </button>
               </div>
-              <button className="home-return" onClick={returnToHome}>
-                <House /> Voltar para a página inicial
-              </button>
             </section>
           )}
           <footer>
             <button
               className="back"
+              disabled={saving || sharing}
               onClick={() =>
                 step === 1 ? setStarted(false) : goToStep(step - 1)
               }

@@ -142,3 +142,52 @@ html :is(button,a,input,textarea,select,summary,[tabindex]):focus-visible{outlin
 .keyboard-help kbd{display:inline-block;padding:0 5px;border:1px solid #d0dee6;border-radius:4px;background:#fff;color:#315d6e;font:inherit;font-weight:700}
 @media(hover:none) and (pointer:coarse){.keyboard-help{display:none}}
 @media(prefers-reduced-motion:reduce){.panel,.reveal{animation:none!important}}
+
+/* Finalização: gravação destacada, link principal e texto como alternativa. */
+.daily-save-card{margin-top:24px;padding:20px;border:1px solid #a7d4cb;border-radius:16px;background:linear-gradient(135deg,#edf9f5,#fff);box-shadow:0 8px 24px #007f7809}
+.daily-save-heading{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px}
+.daily-save-heading>svg{width:24px;height:24px;flex-shrink:0;color:#00856f;margin-top:2px}
+.daily-save-heading h3,.daily-share-heading h3{margin:0;color:#294f5f;font-size:18px;font-weight:700;line-height:1.3;letter-spacing:-.015em}
+.daily-save-heading p,.daily-share-heading p{margin:6px 0 0;color:#607985;font-size:13px;line-height:1.5}
+.daily-save-card .save-daily-primary{width:100%;height:auto;min-height:60px;padding:15px 20px;border-radius:12px;background:linear-gradient(135deg,#009b7f,#00796f)!important;color:#fff!important;box-shadow:0 8px 20px #00856f20;font-size:17px;font-weight:700;white-space:normal}
+.daily-save-card .save-daily-primary svg{width:22px;height:22px}
+.daily-save-card .save-daily-primary:hover:not(:disabled){background:#00786b!important}
+.daily-save-card .save-daily-primary:disabled{opacity:.7;cursor:default}
+.daily-save-hint{margin:10px 0 0;color:#63777f;font-size:12px;line-height:1.5}
+.daily-save-feedback{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:13px;border:1px solid #c9dfe8;border-radius:11px;background:#f0f7fb;color:#315d6e}
+.daily-save-feedback>svg{width:21px;height:21px;flex-shrink:0;margin-top:1px}
+.daily-save-feedback>div{display:grid;gap:4px;min-width:0}
+.daily-save-feedback strong{font-size:15px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
+.daily-save-feedback span{font-size:12px;line-height:1.5}
+.daily-save-feedback.success{background:#e5f6ec;border-color:#acd9bb;color:#21623c}
+.daily-save-feedback.error{background:#fff3f2;border-color:#e7bbbb;color:#983f3a}
+.daily-share-option{margin-top:18px;padding:20px;border:1px solid #d9e4e9;border-radius:16px;background:#fff}
+.daily-share-link{border-color:#b5d4e7;background:#f5faff}
+.daily-share-heading{display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:start;gap:10px}
+.daily-share-number{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#dceefb;color:#006aad;font-size:12px;font-weight:700}
+.recommended-badge{padding:5px 8px;border-radius:999px;background:#dcedfa;color:#0064a4;font-size:10px;font-weight:700;white-space:nowrap}
+.daily-share-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.daily-share-actions .share-link-primary{grid-column:1/-1;min-height:54px;height:auto;padding:13px 18px;white-space:normal;line-height:1.4;font-size:14px;border-radius:10px!important}
+.daily-share-option .share-utility{height:auto;min-height:46px;padding:11px 14px;border:1px solid #c8dce6;border-radius:10px;background:#fff;color:#365f72;font-size:13px;line-height:1.4;white-space:normal}
+.daily-share-option .share-utility:hover:not(:disabled){background:#edf5f9;border-color:#88b2c9}
+.daily-share-option button:disabled{opacity:.55;cursor:wait}
+.daily-text-actions{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:10px;margin-top:15px}
+.daily-share-text .daily-share-number{background:#edf1f4;color:#71848d}
+.daily-share-text .daily-share-heading h3{font-size:16px}
+.share-fallback{margin-top:16px;padding:15px;border:1px solid #b6dbe4;border-radius:12px;background:#f2f9fc;color:#315d6e}
+.share-fallback p{margin:0 0 12px;font-size:13px;line-height:1.5}
+.share-fallback a{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;border-radius:10px;background:#0073c9;color:#fff;font-size:14px;font-weight:700;text-decoration:none}
+.share-fallback a svg{width:19px}
+.delivery-error{padding:12px;margin-top:14px;border:1px solid #e7bbbb;border-radius:10px;background:#fff3f2;color:#983f3a;font-size:13px;line-height:1.5}
+.daily-finish-navigation{display:grid;gap:12px;margin-top:22px}
+.daily-finish-navigation .reset{justify-content:center;margin:0;min-height:44px;font-size:12px}
+.daily-finish-navigation button:disabled{opacity:.55;cursor:wait}
+@media(max-width:640px){
+  .daily-save-card,.daily-share-option{padding:16px;margin-inline:-2px}
+  .daily-share-heading{grid-template-columns:28px minmax(0,1fr);gap:9px}
+  .recommended-badge{grid-column:2;justify-self:start}
+  .daily-share-heading h3{font-size:17px}
+  .daily-share-heading p,.daily-save-heading p{font-size:12px}
+  .daily-text-actions{grid-template-columns:1fr}
+  .daily-share-actions .share-utility{min-height:50px;padding:10px 8px;font-size:12px}
+}
