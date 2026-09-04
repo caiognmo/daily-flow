@@ -159,8 +159,8 @@ html :is(button,a,input,textarea,select,summary,[tabindex]):focus-visible{outlin
 .daily-save-feedback>div{display:grid;gap:4px;min-width:0}
 .daily-save-feedback strong{font-size:15px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
 .daily-save-feedback span{font-size:12px;line-height:1.5}
-.daily-save-feedback.success{background:#e5f6ec;border-color:#acd9bb;color:#21623c}
-.daily-save-feedback.error{background:#fff3f2;border-color:#e7bbbb;color:#983f3a}
+.daily-save-feedback.is-success{background:#e5f6ec;border-color:#acd9bb;color:#21623c}
+.daily-save-feedback.is-error{background:#fff3f2;border-color:#e7bbbb;color:#983f3a}
 .daily-share-option{margin-top:18px;padding:20px;border:1px solid #d9e4e9;border-radius:16px;background:#fff}
 .daily-share-link{border-color:#b5d4e7;background:#f5faff}
 .daily-share-heading{display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:start;gap:10px}

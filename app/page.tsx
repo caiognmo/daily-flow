@@ -1909,7 +1909,7 @@ export default function Home() {
                 )}
                 {saveStatus && (
                   <div
-                    className={`daily-save-feedback ${saveOutcome}`}
+                    className={`daily-save-feedback is-${saveOutcome}`}
                     role={saveOutcome === 'error' ? 'alert' : 'status'}
                     aria-live={saveOutcome === 'error' ? 'assertive' : 'polite'}
                     aria-atomic="true"
