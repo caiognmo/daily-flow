@@ -191,3 +191,7 @@ html :is(button,a,input,textarea,select,summary,[tabindex]):focus-visible{outlin
   .daily-text-actions{grid-template-columns:1fr}
   .daily-share-actions .share-utility{min-height:50px;padding:10px 8px;font-size:12px}
 }
+
+/* Títulos das etapas mais discretos dentro do formulário. */
+.app .form .panel h2{font-size:22px!important;line-height:1.25!important;letter-spacing:-.015em!important}
+@media(max-width:640px){.app .form .panel h2{font-size:20px!important}}
