@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Script from 'next/script';
+import { DateField } from '@/components/date-field';
+import { handleFieldEnter } from '@/lib/form-keyboard';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -170,6 +172,7 @@ function Choice({
     <button
       type="button"
       className={`choice ${active ? 'active' : ''}`}
+      aria-pressed={active}
       onClick={onClick}
     >
       <span>{children}</span>
@@ -306,6 +309,16 @@ export default function Home() {
     [wrongGoogleAccount, setWrongGoogleAccount] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null),
     [dailyCreator, setDailyCreator] = useState('');
+  const formRef = useRef<HTMLDivElement>(null);
+  const goToStep = (nextStep: number) => {
+    setStep(nextStep);
+    requestAnimationFrame(() =>
+      formRef.current?.querySelector<HTMLElement>('h2')?.focus(),
+    );
+  };
+  const focusField = (id: string) => {
+    requestAnimationFrame(() => document.getElementById(id)?.focus());
+  };
   const update = <K extends keyof FormData>(k: K, v: FormData[K]) => {
     setSaveStatus('');
     setDailyDirty(true);
@@ -318,18 +331,24 @@ export default function Home() {
         i === index ? { ...employee, [key]: value } : employee,
       ),
     );
-  const addEmployee = () =>
+  const addEmployee = () => {
     update('employees', [...data.employees, { name: '', role: '' }]);
-  const removeEmployee = (index: number) =>
+    focusField(`employee-name-${data.employees.length}`);
+  };
+  const removeEmployee = (index: number) => {
     update(
       'employees',
       data.employees.filter((_, i) => i !== index),
     );
-  const addTrainingCall = () =>
+    focusField(`employee-name-${Math.max(0, index - 1)}`);
+  };
+  const addTrainingCall = () => {
     update('trainingCalls', [
       ...(data.trainingCalls || []),
       { date: '', label: '', url: '' },
     ]);
+    focusField(`training-call-date-${(data.trainingCalls || []).length}`);
+  };
   const updateTrainingCall = (
     index: number,
     key: keyof TrainingCall,
@@ -1049,7 +1068,7 @@ export default function Home() {
     <main className="app">
       <aside>
         <Brand />
-        <nav>
+        <nav aria-label="Etapas do daily">
           {[
             ['01', 'Cliente & plano'],
             ['02', 'Treinamento'],
@@ -1059,7 +1078,8 @@ export default function Home() {
             <button
               key={n}
               className={`navstep ${step === i + 1 ? 'current' : ''} ${step > i + 1 ? 'done' : ''}`}
-              onClick={() => setStep(i + 1)}
+              aria-current={step === i + 1 ? 'step' : undefined}
+              onClick={() => goToStep(i + 1)}
             >
               <span>{step > i + 1 ? <Check size={14} /> : n}</span>
               <b>{l}</b>
@@ -1104,7 +1124,7 @@ export default function Home() {
         <div className="progress">
           <i style={{ width: `${step * 25}%` }} />
         </div>
-        <div className="form">
+        <div className="form" ref={formRef} onKeyDown={handleFieldEnter}>
           <div className="kicker">
             Etapa 0{step} <span>/ 04</span>
           </div>
@@ -1115,13 +1135,18 @@ export default function Home() {
             </span>
             {editingId && <em>Modo de edição</em>}
           </div>
+          <p className="keyboard-help">
+            <kbd>Tab</kbd> / <kbd>Shift + Tab</kbd> navegam · <kbd>Enter</kbd>{' '}
+            avança campos de texto e ativa botões. Nas listas, Enter seleciona;
+            nos textos longos, cria uma nova linha.
+          </p>
           {step === 1 && (
             <section className="panel">
-              <h2>Cliente e plano</h2>
+              <h2 tabIndex={-1}>Cliente e plano</h2>
               <p className="lead">
                 Identifique o cliente e pesquise sua localização no Brasil.
               </p>
-              <Label text="Nome do cliente" />
+              <Label text="Nome do cliente" htmlFor="daily-client" />
               <VoiceField
                 label="nome do cliente"
                 onTranscript={(text) =>
@@ -1129,6 +1154,7 @@ export default function Home() {
                 }
               >
                 <input
+                  id="daily-client"
                   className="input big"
                   placeholder="Ex: Ponto Verde"
                   value={data.client}
@@ -1138,7 +1164,10 @@ export default function Home() {
               </VoiceField>
               <div className="cols clientcols">
                 <div>
-                  <Label text="Estado — selecione ou digite" />
+                  <Label
+                    text="Estado — selecione ou digite"
+                    htmlFor="daily-state"
+                  />
                   <VoiceField
                     label="estado"
                     onTranscript={(text) => {
@@ -1147,6 +1176,7 @@ export default function Home() {
                     }}
                   >
                     <input
+                      id="daily-state"
                       className="input"
                       list="brazil-states"
                       placeholder="Busque por UF: MG"
@@ -1168,6 +1198,7 @@ export default function Home() {
                 </div>
                 <div>
                   <Label
+                    htmlFor="daily-city"
                     text={`Cidade — ${citiesLoading ? 'carregando lista...' : 'selecione ou digite'}`}
                   />
                   <VoiceField
@@ -1175,6 +1206,7 @@ export default function Home() {
                     onTranscript={(text) => update('city', text)}
                   >
                     <input
+                      id="daily-city"
                       className="input"
                       list="brazil-cities"
                       placeholder={
@@ -1226,6 +1258,7 @@ export default function Home() {
                 >
                   <input
                     className="input reveal"
+                    aria-label="Nome do plano"
                     placeholder="Digite o nome do plano"
                     value={data.customPlan}
                     onChange={(e) => update('customPlan', e.target.value)}
@@ -1236,7 +1269,7 @@ export default function Home() {
           )}
           {step === 2 && (
             <section className="panel">
-              <h2>Dados do treinamento</h2>
+              <h2 tabIndex={-1}>Dados do treinamento</h2>
               <p className="lead">
                 Registre a data de término e todos que participaram.
               </p>
@@ -1294,23 +1327,19 @@ export default function Home() {
                             </button>
                           </div>
                           <div className="training-call-grid">
-                            <label className="training-call-date">
-                              Data da call
-                              <div className="iconinput">
-                                <CalendarDays />
-                                <input
-                                  type="date"
-                                  value={call.date}
-                                  onChange={(event) =>
-                                    updateTrainingCall(
-                                      index,
-                                      'date',
-                                      event.target.value,
-                                    )
-                                  }
-                                />
-                              </div>
-                            </label>
+                            <div className="training-call-field training-call-date">
+                              <label htmlFor={`training-call-date-${index}`}>
+                                Data da call
+                              </label>
+                              <DateField
+                                id={`training-call-date-${index}`}
+                                label={`Data da call ${index + 1}`}
+                                value={call.date}
+                                onChange={(value) =>
+                                  updateTrainingCall(index, 'date', value)
+                                }
+                              />
+                            </div>
                             <div className="training-call-field">
                               <label htmlFor={`training-call-label-${index}`}>
                                 Identificação opcional
@@ -1392,19 +1421,20 @@ export default function Home() {
                   </button>
                 </section>
               )}
-              <Label text="Término do treinamento — calendário ou texto" />
+              <Label
+                text="Término do treinamento — calendário ou texto"
+                htmlFor="training-end-date"
+              />
               <div className="cols datecols">
-                <div className="iconinput">
-                  <CalendarDays />
-                  <input
-                    type="date"
-                    value={data.endDate}
-                    onChange={(e) => {
-                      update('endDate', e.target.value);
-                      if (e.target.value) update('endDateText', '');
-                    }}
-                  />
-                </div>
+                <DateField
+                  id="training-end-date"
+                  label="Término do treinamento"
+                  value={data.endDate}
+                  onChange={(value) => {
+                    update('endDate', value);
+                    if (value) update('endDateText', '');
+                  }}
+                />
                 <VoiceField
                   label="data de término por texto"
                   onTranscript={(text) => {
@@ -1414,6 +1444,7 @@ export default function Home() {
                 >
                   <input
                     className="input"
+                    aria-label="Término do treinamento por texto"
                     placeholder="Ou digite: próxima sexta"
                     value={data.endDateText}
                     onChange={(e) => {
@@ -1434,7 +1465,8 @@ export default function Home() {
                 {data.employees.map((employee, index) => (
                   <div className="employee-row" key={index}>
                     <span className="employee-index">
-                      Funcionário {String(index + 1).padStart(2, '0')}
+                      <span className="employee-index-label">Funcionário </span>
+                      {String(index + 1).padStart(2, '0')}
                     </span>
                     <div className="employee-field employee-name">
                       <label htmlFor={`employee-name-${index}`}>
@@ -1506,7 +1538,7 @@ export default function Home() {
           )}
           {step === 3 && (
             <section className="panel">
-              <h2>Fluxo de trabalho e software</h2>
+              <h2 tabIndex={-1}>Fluxo de trabalho e software</h2>
               <p className="lead">
                 Explique o fluxo e informe a adequação do software.
               </p>
@@ -1515,6 +1547,7 @@ export default function Home() {
                 <button
                   type="button"
                   className={`audio ${data.includeAudio ? 'selected' : ''}`}
+                  aria-pressed={data.includeAudio}
                   onClick={() => update('includeAudio', !data.includeAudio)}
                 >
                   <span>
@@ -1534,6 +1567,7 @@ export default function Home() {
                   }
                 >
                   <textarea
+                    aria-label="Explicação do fluxo de trabalho"
                     placeholder="Adicione uma explicação complementar (opcional)"
                     value={data.flowText}
                     onChange={(e) => update('flowText', e.target.value)}
@@ -1576,6 +1610,7 @@ export default function Home() {
                 >
                   <input
                     className="input reveal"
+                    aria-label="Nome do software anterior"
                     placeholder="Nome do software anterior"
                     value={data.softwareName}
                     onChange={(e) => update('softwareName', e.target.value)}
@@ -1595,6 +1630,7 @@ export default function Home() {
                 >
                   <textarea
                     className="reveal"
+                    aria-label="Descrição da adequação do software"
                     placeholder="Descreva a adequação necessária"
                     value={data.customSoftware}
                     onChange={(e) => update('customSoftware', e.target.value)}
@@ -1610,7 +1646,7 @@ export default function Home() {
                   <div className="eyebrow">
                     <Sparkles /> Conferência final
                   </div>
-                  <h2>Revisão e envio</h2>
+                  <h2 tabIndex={-1}>Revisão e envio</h2>
                   <p className="lead">
                     Sua mensagem já está formatada para o WhatsApp.
                   </p>
@@ -1800,7 +1836,7 @@ export default function Home() {
             <button
               className="back"
               onClick={() =>
-                step === 1 ? setStarted(false) : setStep(step - 1)
+                step === 1 ? setStarted(false) : goToStep(step - 1)
               }
             >
               <ArrowLeft /> Voltar
@@ -1809,7 +1845,7 @@ export default function Home() {
               <button
                 className="next"
                 disabled={!can}
-                onClick={() => setStep(step + 1)}
+                onClick={() => goToStep(step + 1)}
               >
                 Continuar <ArrowRight />
               </button>
@@ -1837,8 +1873,12 @@ function Brand({ welcome = false }: { welcome?: boolean }) {
     </a>
   );
 }
-function Label({ text }: { text: string }) {
-  return <label className="label">{text}</label>;
+function Label({ text, htmlFor }: { text: string; htmlFor?: string }) {
+  return (
+    <label className="label" htmlFor={htmlFor}>
+      {text}
+    </label>
+  );
 }
 function ReportView({ data }: { data: ReportPayload }) {
   const plan = data.plan === 'Outro' ? data.customPlan : data.plan,
@@ -2358,22 +2398,24 @@ function DailyConsultation({
                 <small>A prévia mostra exatamente o que será excluído.</small>
               </div>
               <div className="storage-fields">
-                <label>
-                  De
-                  <input
-                    type="date"
+                <div className="storage-date">
+                  <label htmlFor="cleanup-from">De</label>
+                  <DateField
+                    id="cleanup-from"
+                    label="Início do período de limpeza"
                     value={cleanupFrom}
-                    onChange={(event) => setCleanupFrom(event.target.value)}
+                    onChange={setCleanupFrom}
                   />
-                </label>
-                <label>
-                  Até
-                  <input
-                    type="date"
+                </div>
+                <div className="storage-date">
+                  <label htmlFor="cleanup-to">Até</label>
+                  <DateField
+                    id="cleanup-to"
+                    label="Fim do período de limpeza"
                     value={cleanupTo}
-                    onChange={(event) => setCleanupTo(event.target.value)}
+                    onChange={setCleanupTo}
                   />
-                </label>
+                </div>
                 <button
                   className="storage-preview-button"
                   onClick={previewCleanup}
@@ -2422,12 +2464,17 @@ function DailyConsultation({
           <div>
             <Search />
             <input
+              aria-label="Pesquisar dailys por cliente, cidade ou responsável"
               placeholder="Cliente, cidade, responsável..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <select value={uf} onChange={(e) => setUf(e.target.value)}>
+          <select
+            aria-label="Filtrar por estado"
+            value={uf}
+            onChange={(e) => setUf(e.target.value)}
+          >
             <option value="">Todos os estados</option>
             {states.map(([code, name]) => (
               <option key={code} value={code}>
@@ -2436,6 +2483,7 @@ function DailyConsultation({
             ))}
           </select>
           <select
+            aria-label="Filtrar por plano"
             value={planFilter}
             onChange={(e) => setPlanFilter(e.target.value)}
           >
@@ -2444,10 +2492,11 @@ function DailyConsultation({
               <option key={p}>{p}</option>
             ))}
           </select>
-          <input
-            type="date"
+          <DateField
+            id="filter-date"
+            label="Filtrar por data do daily"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={setDate}
           />
         </section>
         {notice && <p className="consult-notice">{notice}</p>}

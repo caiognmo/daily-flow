@@ -86,3 +86,59 @@ body{font-family:"Titillium Web",var(--font-geist-sans),Arial,sans-serif;backgro
 
 /* O logotipo do cabeçalho é o atalho permanente para a home. */
 a.brand,a.welcomebrand{color:inherit;text-decoration:none;cursor:pointer}a.brand:focus-visible,a.welcomebrand:focus-visible{outline:2px solid #00af91;outline-offset:5px;border-radius:8px}a.brand:hover b{opacity:.82}
+
+/* Numeração cabe na coluna do desktop; os rótulos ficam acima dos campos. */
+@media(min-width:641px){
+  .employee-list .employee-row{grid-template-columns:34px minmax(0,1fr) minmax(0,1fr) 44px;align-items:end;gap:12px}
+  .employee-list .employee-index{width:32px;height:32px;display:grid;place-items:center;align-self:end;margin-bottom:13px;border-radius:50%;background:#e6f3f8;color:#17617f!important;font-weight:700}
+  .employee-index .employee-index-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .employee-list .remove-employee{height:58px}
+}
+@media(min-width:641px) and (max-width:1100px){
+  .employee-list .employee-row{grid-template-columns:34px minmax(0,1fr) 44px;grid-template-areas:"index name remove" ". role .";gap:12px}
+  .employee-list .employee-index{grid-area:index}
+  .employee-list .employee-name{grid-area:name}
+  .employee-list .employee-role{grid-area:role}
+  .employee-list .remove-employee{grid-area:remove}
+}
+
+/* Calendário com abertura explícita, digitação e navegação por teclado. */
+.daily-date-field{position:relative;min-width:0;width:100%}
+.daily-date-field .daily-date-input{display:block;width:100%;min-width:0;height:56px;padding:0 58px 0 14px!important;font-size:16px!important;font-weight:400;letter-spacing:normal;color-scheme:light;color:#35515e!important;background:#fff!important}
+.daily-date-input::-webkit-calendar-picker-indicator{display:none}
+.daily-date-field>.calendar-trigger{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:44px;height:44px;display:grid;place-items:center;border:1px solid #c4dfe9;border-radius:9px;background:#edf7fb;color:#0073c9}
+.daily-date-field>.calendar-trigger:hover{background:#dceef7}
+.daily-date-field>.calendar-trigger svg{width:21px;height:21px;pointer-events:none}
+.daily-date-popover{--primary:#0073c9;--primary-foreground:#fff;--muted:#edf5f9;--foreground:#294f5f;--radius-md:8px;width:min(340px,calc(100vw - 24px));max-height:var(--available-height);overflow:auto;padding:14px;border:1px solid #c4d7e1;border-radius:16px;background:#fff;color:#294f5f;box-shadow:0 16px 50px #163c5733;z-index:100}
+.daily-calendar-title{font-size:13px;font-weight:700;line-height:1.4;padding:0 6px}
+.daily-calendar{--cell-size:40px;width:100%;padding:0;margin:8px 0}
+.daily-calendar .rdp-months{width:100%}
+.daily-calendar .rdp-week>td{flex:1;min-width:0}
+.daily-calendar .rdp-week button{min-width:0;width:100%;height:40px;border-radius:8px;color:#294f5f;background:transparent;font-size:14px}
+.daily-calendar .rdp-week button:hover{background:#e5f3fa}
+.daily-calendar .rdp-week button[data-selected-single=true]{background:#0073c9;color:#fff;font-weight:700}
+.daily-calendar .rdp-today:not([data-selected=true]){box-shadow:inset 0 0 0 1px #8ab5cd;border-radius:8px}
+.daily-calendar .rdp-outside{opacity:.45}
+.daily-calendar .rdp-nav button{width:40px;height:40px;border:1px solid #d9e7ee;border-radius:8px;background:#f5fafc;color:#0073c9}
+.daily-calendar .rdp-month_caption{height:40px;font-size:15px;text-transform:capitalize}
+.daily-calendar .rdp-weekday{color:#607c8a;font-size:12px}
+.daily-calendar-actions{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #e0eaf0;padding-top:10px}
+.daily-calendar-actions button{min-height:40px;padding:0 12px;border:0;border-radius:8px;background:#edf5f9;color:#0062a9;font-size:13px;font-weight:700}
+.daily-calendar-help{margin:4px 6px 0;color:#607c8a;font-size:11px;line-height:1.5}
+.filters>.daily-date-field{grid-column:auto;height:auto;border:0;padding:0;display:block}
+.filters .daily-date-input,.storage-date .daily-date-input{height:46px!important;border:1px solid #dbe3e8!important}
+.storage-date{display:grid;gap:5px;min-width:0;flex:1 1 180px}
+.filters .calendar-trigger,.storage-date .calendar-trigger{width:40px;height:40px;right:3px}
+@media(max-width:640px){
+  .daily-date-field .daily-date-input{height:62px!important}
+  .filters .daily-date-input,.storage-date .daily-date-input{height:52px!important}
+}
+
+/* Mesmo foco visível para campos, seletores, ações e links. */
+html :is(button,a,input,textarea,select,summary,[tabindex]):focus-visible{outline:3px solid #0073c9!important;outline-offset:3px!important}
+.app>aside :is(button,a):focus-visible{outline-color:#fff!important}
+.form :is(input,textarea,select,button,a,h2){scroll-margin-block:100px}
+.keyboard-help{margin:12px 0 20px;color:#567080;font-size:12px;line-height:1.8}
+.keyboard-help kbd{display:inline-block;padding:0 5px;border:1px solid #d0dee6;border-radius:4px;background:#fff;color:#315d6e;font:inherit;font-weight:700}
+@media(hover:none) and (pointer:coarse){.keyboard-help{display:none}}
+@media(prefers-reduced-motion:reduce){.panel,.reveal{animation:none!important}}
