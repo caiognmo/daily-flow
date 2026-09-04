@@ -195,3 +195,33 @@ html :is(button,a,input,textarea,select,summary,[tabindex]):focus-visible{outlin
 /* Títulos das etapas mais discretos dentro do formulário. */
 .app .form .panel h2{font-size:22px!important;line-height:1.25!important;letter-spacing:-.015em!important}
 @media(max-width:640px){.app .form .panel h2{font-size:20px!important}}
+
+/* Navegação direta entre criação e consulta. */
+.form-consult{height:34px;padding:0 12px;display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid rgba(255,255,255,.3);border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font-size:10px;font-weight:700;white-space:nowrap}
+.form-consult:hover:not(:disabled){background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.55)}
+.form-consult:disabled{opacity:.55;cursor:wait}
+.form-consult svg{width:15px;height:15px}
+.consult-title-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap}
+.consult-title-actions>button{min-height:44px;padding:0 16px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;font-size:12px;font-weight:700}
+.consult-title-actions svg{width:17px}
+.consult-title-actions .consult-create{border:0;background:linear-gradient(135deg,#0073c9,#009bf1);color:#fff;box-shadow:0 7px 18px rgba(0,115,201,.18)}
+.consult-title-actions .consult-create:hover{background:linear-gradient(135deg,#0066b2,#0085d2);transform:translateY(-1px)}
+.consult-title-actions .consult-admin{border:1px solid #b8d3da;background:#fff;color:#315d6e}
+.consult-title-actions .consult-admin:hover{border-color:#0073c9;color:#0073c9;background:#f6fbfd}
+@media(max-width:800px){
+  .form-consult{height:32px;padding:0 9px;font-size:9px}
+  .consult-title{align-items:flex-start}
+  .consult-title-actions{justify-content:flex-start}
+  .consult-title-actions>button{min-height:42px;padding-inline:13px}
+}
+@media(max-width:400px){
+  .form-user{display:none!important}
+  .topbar-step>div{display:none}
+  .form-consult span{font-size:0}
+  .form-consult{width:32px;padding:0}
+}
+@media(max-width:520px){
+  .consult-title-actions{width:100%;display:grid;grid-template-columns:1fr auto}
+  .consult-title-actions .consult-create{width:100%}
+  .consult-title-actions .consult-admin{font-size:0;width:44px;padding:0}
+}

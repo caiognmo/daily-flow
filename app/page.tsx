@@ -948,6 +948,7 @@ export default function Home() {
     setAudioBlob(null);
     setAudioSeconds(0);
     setAudioError('');
+    setProcessingAudio(false);
     setSaveStatus('');
     setSaveOutcome('idle');
     setShareFallback('');
@@ -956,6 +957,31 @@ export default function Home() {
     setCopied(false);
     setLinkCopied(false);
     window.scrollTo({ top: 0 });
+  };
+  const openConsultation = () => {
+    setConsulting(true);
+    window.scrollTo({ top: 0 });
+  };
+  const startNewDaily = () => {
+    setData(initial);
+    setEditingId(null);
+    setDailyCreator(homeSession?.email || '');
+    setAudioUrl('');
+    setAudioBlob(null);
+    setAudioSeconds(0);
+    setAudioError('');
+    setProcessingAudio(false);
+    setSaveStatus('');
+    setSaveOutcome('idle');
+    setShareFallback('');
+    setDeliveryError('');
+    setDailyDirty(true);
+    setCopied(false);
+    setLinkCopied(false);
+    setConsulting(false);
+    setStarted(true);
+    setStep(1);
+    window.setTimeout(() => window.scrollTo({ top: 0 }), 0);
   };
   const signOut = async () => {
     if (!['localhost', '127.0.0.1'].includes(window.location.hostname))
@@ -1044,10 +1070,7 @@ export default function Home() {
                   <ArrowRight />
                 </span>
               </button>
-              <button
-                className="consult-home"
-                onClick={() => setConsulting(true)}
-              >
+              <button className="consult-home" onClick={openConsultation}>
                 <Search /> Consultar dailys
               </button>
             </div>
@@ -1079,6 +1102,7 @@ export default function Home() {
     return (
       <DailyConsultation
         onBack={() => setConsulting(false)}
+        onCreate={startNewDaily}
         onSignOut={signOut}
         onEdit={(row, current) => {
           setData({
@@ -1141,7 +1165,7 @@ export default function Home() {
               key={n}
               className={`navstep ${step === i + 1 ? 'current' : ''} ${step > i + 1 ? 'done' : ''}`}
               aria-current={step === i + 1 ? 'step' : undefined}
-              disabled={saving || sharing}
+              disabled={actionBusy}
               onClick={() => goToStep(i + 1)}
             >
               <span>{step > i + 1 ? <Check size={14} /> : n}</span>
@@ -1162,6 +1186,15 @@ export default function Home() {
             </small>
             <strong>{stepLabels[step - 1]}</strong>
           </div>
+          <button
+            type="button"
+            className="form-consult"
+            onClick={openConsultation}
+            disabled={actionBusy}
+            title="Consultar dailys"
+          >
+            <Search /> <span>Consultar dailys</span>
+          </button>
           <div className="form-user" title={homeSession.email}>
             <ShieldCheck />
             <span>
@@ -1809,7 +1842,7 @@ export default function Home() {
                 {audioUrl && (
                   <div className="audioresult">
                     <audio controls src={audioUrl} />
-                    <button onClick={shareAudio} disabled={saving || sharing}>
+                    <button onClick={shareAudio} disabled={actionBusy}>
                       <Send /> Enviar áudio
                     </button>
                     <a
@@ -1820,7 +1853,7 @@ export default function Home() {
                     </a>
                     <button
                       className="redo"
-                      disabled={saving || sharing}
+                      disabled={actionBusy}
                       onClick={() => {
                         setAudioUrl('');
                         setAudioBlob(null);
@@ -2016,7 +2049,7 @@ export default function Home() {
               <div className="daily-finish-navigation">
                 <button
                   className="home-return"
-                  disabled={saving || sharing}
+                  disabled={actionBusy}
                   onClick={returnToHome}
                 >
                   <House /> Voltar para a página inicial
@@ -2048,7 +2081,7 @@ export default function Home() {
           <footer>
             <button
               className="back"
-              disabled={saving || sharing}
+              disabled={actionBusy}
               onClick={() =>
                 step === 1 ? setStarted(false) : goToStep(step - 1)
               }
@@ -2279,10 +2312,12 @@ type StorageInfo = {
 };
 function DailyConsultation({
   onBack,
+  onCreate,
   onEdit,
   onSignOut,
 }: {
   onBack: () => void;
+  onCreate: () => void;
   onEdit: (row: DailyRow, data: ReportPayload) => void;
   onSignOut: () => void;
 }) {
@@ -2515,11 +2550,20 @@ function DailyConsultation({
             <h1>Consultar dailys</h1>
             <p>Pesquise, filtre e compartilhe os registros de implantação.</p>
           </div>
-          {session?.isAdmin && (
-            <button onClick={() => setShowPermissions(!showPermissions)}>
-              <Settings2 /> Administração
+          <div className="consult-title-actions">
+            <button className="consult-create" onClick={onCreate}>
+              <Plus /> Criar nova daily
             </button>
-          )}
+            {session?.isAdmin && (
+              <button
+                className="consult-admin"
+                onClick={() => setShowPermissions(!showPermissions)}
+                aria-expanded={showPermissions}
+              >
+                <Settings2 /> Administração
+              </button>
+            )}
+          </div>
         </div>
         {session?.isAdmin && storage?.warning !== 'ok' && (
           <div className={`storage-warning ${storage?.warning || ''}`}>
