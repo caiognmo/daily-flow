@@ -229,3 +229,19 @@ html :is(button,a,input,textarea,select,summary,[tabindex]):focus-visible{outlin
 /* Nome do cliente no cabeçalho do relatório gerado. */
 .public-report article>h1{font-size:clamp(28px,4vw,36px)!important;line-height:1.1!important;letter-spacing:-.025em!important;margin:30px 0 8px!important;overflow-wrap:anywhere}
 @media(max-width:640px){.public-report article>h1{font-size:clamp(24px,7.5vw,30px)!important;margin-top:24px!important}}
+
+/* Confirmação de cópia visível acima de todas as telas. */
+.copy-notice-viewport{z-index:200!important;bottom:max(24px,env(safe-area-inset-bottom))!important}
+.copy-notice{background:#087b4b!important;color:#fff!important;border:1px solid #08663f!important;box-shadow:0 10px 32px #064e3b33!important}
+.copy-notice-error{background:#a53838!important;border-color:#892a2a!important}
+.copy-notice [data-slot=toast-content]>svg{width:23px;height:23px;flex-shrink:0}
+.copy-notice .copy-notice-title{flex:1;min-width:0;font-size:15px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
+.copy-notice .copy-notice-close{color:#fff!important;min-width:36px;min-height:36px}
+.copy-notice .copy-notice-close:hover{background:#ffffff20!important}
+@media(min-width:641px){
+  .brand-home .home-title{font-size:clamp(64px,8vw,112px);letter-spacing:-.055em;line-height:1.05;top:32%;text-shadow:0 1px 0 #fff,0 10px 24px #00497712}
+  .brand-home:has(.auth-card){display:flex;flex-direction:column;justify-content:center;gap:32px;min-height:100dvh;padding-block:110px 64px}
+  .brand-home:has(.auth-card) .home-title{position:relative;left:auto;top:auto;transform:none;flex-shrink:0}
+  .brand-home .auth-card{transform:none;flex-shrink:0}
+}
+@media print{.copy-notice-viewport{display:none!important}}

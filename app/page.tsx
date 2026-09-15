@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Script from 'next/script';
+import { copyWithNotice } from '@/components/copy-notifications';
 import { DateField } from '@/components/date-field';
 import { handleFieldEnter } from '@/lib/form-keyboard';
 import { shareSavedDaily } from '@/lib/share-saved-daily';
@@ -709,7 +710,7 @@ export default function Home() {
     const reportId = await ensureSavedReport();
     if (!reportId) return;
     try {
-      await navigator.clipboard.writeText(message);
+      if (!(await copyWithNotice(message, 'Mensagem copiada!'))) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -918,7 +919,7 @@ export default function Home() {
     const reportId = await ensureSavedReport();
     if (!reportId) return;
     try {
-      await navigator.clipboard.writeText(getReportLink(reportId));
+      if (!(await copyWithNotice(getReportLink(reportId)))) return;
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 1800);
     } catch {
@@ -2784,9 +2785,7 @@ function DailyConsultation({
                   <a href={link(row)} target="_blank" rel="noreferrer">
                     <ExternalLink /> Abrir
                   </a>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(link(row))}
-                  >
+                  <button onClick={() => copyWithNotice(link(row))}>
                     <Clipboard /> Link
                   </button>
                   <button onClick={() => share(row)}>
