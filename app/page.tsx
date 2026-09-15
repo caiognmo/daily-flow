@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Script from 'next/script';
 import { copyWithNotice } from '@/components/copy-notifications';
+import { ActivityPanel, ReportActivity } from '@/components/activity-panel';
 import { DateField } from '@/components/date-field';
 import { handleFieldEnter } from '@/lib/form-keyboard';
 import { shareSavedDaily } from '@/lib/share-saved-daily';
@@ -607,6 +608,7 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search),
       legacyReport = params.get('daily'),
       reportId = params.get('r');
+    if (!homeSession?.email) return;
     if (legacyReport) {
       try {
         setReportData(JSON.parse(legacyReport) as ReportPayload);
@@ -636,7 +638,7 @@ export default function Home() {
         setReportState('error');
       });
     return () => controller.abort();
-  }, []);
+  }, [homeSession?.email]);
   const plan = data.plan === 'Outro' ? data.customPlan : data.plan;
   const software =
     data.softwareMode === 'none'
@@ -1094,6 +1096,10 @@ export default function Home() {
                   : 'Entrar com Google corporativo'}
               </button>
               <em>@sistemasbr.net ou @sistemasbr.com.br</em>
+              <small>
+                Uso corporativo: acessos e aberturas de relatórios são
+                registrados para acompanhamento interno.
+              </small>
             </div>
           )}
         </main>
@@ -2164,6 +2170,7 @@ function ReportView({ data }: { data: ReportPayload }) {
   };
   return (
     <main className="public-report">
+      <ReportActivity />
       <header>
         <Brand />
         <div className="public-report-actions">
@@ -2579,6 +2586,11 @@ function DailyConsultation({
             </span>
           </div>
         )}
+        {showPermissions &&
+          session &&
+          ['caio@sistemasbr.net', 'caio@sistemasbr.com.br'].includes(
+            session.email,
+          ) && <ActivityPanel reports={rows} />}
         {showPermissions && (
           <section className="permission-card">
             <div>

@@ -245,3 +245,12 @@ html :is(button,a,input,textarea,select,summary,[tabindex]):focus-visible{outlin
   .brand-home .auth-card{transform:none;flex-shrink:0}
 }
 @media print{.copy-notice-viewport{display:none!important}}
+
+.activity-panel{margin:24px 0;padding:24px;background:#fff;border:1px solid #d8e5ec;border-radius:18px;color:#234354;min-width:0}
+.activity-panel h2{font-size:22px;margin:0}.activity-panel h3{font-size:18px;margin:24px 0 12px}.activity-panel p{font-size:14px;line-height:1.6;color:#536b78;margin:10px 0}
+.activity-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.activity-panel button{padding:10px 16px;border:1px solid #b8d2df;border-radius:10px;background:#f1f8fb;color:#075f91;min-height:44px;cursor:pointer;font-size:14px}.activity-panel button:disabled{opacity:.5;cursor:default}
+.activity-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}.activity-filters label{display:flex;flex-direction:column;gap:8px;font-size:14px;min-width:0}.activity-filters input,.activity-filters select{width:100%;min-height:46px;font-size:16px;border:1px solid #cbdde5;border-radius:8px;padding:10px;background:white;color:#234354;min-width:0}
+.activity-toggle{display:flex;align-items:center;gap:10px;font-size:14px;margin:16px 0}.activity-toggle input{width:18px;height:18px;flex-shrink:0}
+.activity-table-scroll{overflow-x:auto;max-width:100%;border:1px solid #dce7ed;border-radius:10px}.activity-panel table{width:100%;border-collapse:collapse;font-size:14px;text-align:left}.activity-panel th{background:#eff6fa;color:#075f91}.activity-panel th,.activity-panel td{padding:14px;vertical-align:top;border-bottom:1px solid #e7eef2;min-width:100px}.activity-panel td{overflow-wrap:anywhere}.activity-panel td small{display:block;margin-top:6px;color:#765315}.activity-panel .activity-user{padding:0;background:none;border:0;text-align:left;overflow-wrap:anywhere}.activity-panel a{color:#075f91;text-decoration:underline}.activity-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:18px;font-size:14px}
+@media(max-width:640px){.activity-panel{padding:16px}.activity-filters{grid-template-columns:1fr}.activity-heading{align-items:flex-start}.activity-panel h2{font-size:20px}.activity-table-scroll table{min-width:640px}}

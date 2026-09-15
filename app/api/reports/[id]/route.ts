@@ -1,12 +1,18 @@
 import { env } from 'cloudflare:workers';
+import { authorizedCompanyEmail } from '@/lib/request-identity';
 
 const audioUrlForKey = (key: string) =>
   `/api/audio/${key.split('/').map(encodeURIComponent).join('/')}`;
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (!(await authorizedCompanyEmail(request)))
+    return Response.json(
+      { error: 'Entre com uma conta corporativa autorizada.' },
+      { status: 401, headers: { 'cache-control': 'no-store' } },
+    );
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id))
     return Response.json({ error: 'Relatório inválido' }, { status: 400 });

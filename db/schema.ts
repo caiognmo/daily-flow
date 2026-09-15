@@ -1,5 +1,27 @@
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
+export const activityEvents = sqliteTable(
+  'activity_events',
+  {
+    id: text('id').primaryKey(),
+    email: text('email').notNull(),
+    action: text('action').notNull(),
+    reportId: text('report_id').notNull().default(''),
+    client: text('client').notNull().default(''),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_activity_time').on(table.createdAt),
+    index('idx_activity_user_action_report_time').on(
+      table.email,
+      table.action,
+      table.reportId,
+      table.createdAt,
+    ),
+    index('idx_activity_report_time').on(table.reportId, table.createdAt),
+  ],
+);
+
 export const dailys = sqliteTable(
   'dailys',
   {

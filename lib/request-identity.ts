@@ -6,6 +6,17 @@ import {
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
 
+export async function authorizedCompanyEmail(request: Request) {
+  const email = await requestEmail(request);
+  if (!isAllowedCompanyEmail(email)) return '';
+  const permission = await env.DB.prepare(
+    'SELECT enabled FROM permissions WHERE email=?',
+  )
+    .bind(email)
+    .first<{ enabled: number }>();
+  return permission?.enabled === 0 ? '' : email;
+}
+
 export const isAllowedCompanyEmail = (email: string) =>
   email.toLowerCase().endsWith('@sistemasbr.net') ||
   email.toLowerCase().endsWith('@sistemasbr.com.br');

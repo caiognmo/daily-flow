@@ -15,6 +15,13 @@
       "when": 1788375854018,
       "tag": "0001_pink_golden_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789442202221,
+      "tag": "0002_lying_millenium_guard",
+      "breakpoints": true
     }
   ]
 }

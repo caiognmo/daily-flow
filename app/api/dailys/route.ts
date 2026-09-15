@@ -1,16 +1,20 @@
 import { env } from 'cloudflare:workers';
+import { recordActivity } from '@/lib/activity';
 import {
   audioKeyFor,
   deleteAudio,
   MAX_AUDIO_BYTES,
   putAudio,
 } from '@/lib/audio-storage';
-import { isAllowedCompanyEmail, requestEmail } from '@/lib/request-identity';
+import {
+  isAllowedCompanyEmail,
+  authorizedCompanyEmail,
+} from '@/lib/request-identity';
 
 const textField = (value: unknown) => (typeof value === 'string' ? value : '');
 
 export async function GET(request: Request) {
-  const email = await requestEmail(request);
+  const email = await authorizedCompanyEmail(request);
   if (!isAllowedCompanyEmail(email))
     return Response.json({ error: 'Não autorizado' }, { status: 401 });
   const rows = await (env.DB as D1Database)
@@ -23,7 +27,7 @@ export async function GET(request: Request) {
   });
 }
 export async function POST(request: Request) {
-  const email = await requestEmail(request);
+  const email = await authorizedCompanyEmail(request);
   if (!isAllowedCompanyEmail(email))
     return Response.json({ error: 'Não autorizado' }, { status: 401 });
   const form = await request.formData(),
@@ -90,6 +94,7 @@ export async function POST(request: Request) {
       { error: 'A daily não apareceu na lista após a gravação.' },
       { status: 500 },
     );
+  await recordActivity(email, 'create', id, textField(data.client));
   return Response.json(
     { id, audioKey, saved: true, record: saved },
     { status: 201, headers: { 'cache-control': 'no-store' } },

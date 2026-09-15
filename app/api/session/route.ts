@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { recordActivity } from '@/lib/activity';
 import { isAllowedCompanyEmail, requestEmail } from '@/lib/request-identity';
 
 export async function GET(request: Request) {
@@ -37,6 +38,7 @@ export async function GET(request: Request) {
       { authenticated: true, email, enabled: false },
       { status: 403 },
     );
+  await recordActivity(email, 'access');
   return Response.json(
     {
       authenticated: true,

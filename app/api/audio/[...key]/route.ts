@@ -1,9 +1,15 @@
 import { env } from 'cloudflare:workers';
+import { authorizedCompanyEmail } from '@/lib/request-identity';
 import type { AudioMetadata } from '@/lib/audio-storage';
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ key: string[] }> },
 ) {
+  if (!(await authorizedCompanyEmail(request)))
+    return new Response('Não autorizado', {
+      status: 401,
+      headers: { 'cache-control': 'no-store' },
+    });
   const { key } = await params,
     stored = await env.AUDIO_FILES.getWithMetadata<AudioMetadata>(
       key.join('/'),
@@ -15,7 +21,7 @@ export async function GET(
     h = new Headers({
       'content-type': stored.metadata?.contentType || 'audio/webm',
       'accept-ranges': 'bytes',
-      'cache-control': 'public, max-age=300',
+      'cache-control': 'private, no-store',
       'x-content-type-options': 'nosniff',
     });
   const range = request.headers.get('range')?.match(/^bytes=(\d*)-(\d*)$/);

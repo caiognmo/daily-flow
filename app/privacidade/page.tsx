@@ -19,7 +19,7 @@ export default function PrivacyPage() {
           <p className="legal-kicker">Transparência e segurança</p>
           <h1>Política de Privacidade</h1>
           <p className="legal-updated">
-            Última atualização: 2 de setembro de 2026
+            Última atualização: 15 de setembro de 2026
           </p>
 
           <p>
@@ -58,10 +58,21 @@ export default function PrivacyPage() {
           <h2>Armazenamento e compartilhamento</h2>
           <p>
             Relatórios e áudios são processados na infraestrutura da Cloudflare.
-            O acesso à área de gestão é restrito a usuários autorizados. Um
-            relatório também poderá ser visto por quem receber seu link, e o
-            compartilhamento pelo WhatsApp só ocorre quando iniciado pelo
+            O acesso à área de gestão, aos relatórios e aos áudios exige uma
+            conta corporativa autorizada. Receber um link não dispensa o login,
+            e o compartilhamento pelo WhatsApp só ocorre quando iniciado pelo
             próprio usuário.
+          </p>
+
+          <h2>Histórico de utilização</h2>
+          <p>
+            Registramos o e-mail autenticado, a data e hora, o acesso ao sistema
+            e a abertura, criação ou alteração de relatórios, com a
+            identificação do relatório. Esses registros servem ao acompanhamento
+            interno de uso e são consultáveis exclusivamente pelo administrador
+            Caio. Uma abertura não comprova a leitura do conteúdo. O histórico
+            não coleta IP ou localização e não recupera atividades anteriores à
+            sua implantação.
           </p>
 
           <h2>Retenção, segurança e seus direitos</h2>

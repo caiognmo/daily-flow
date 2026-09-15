@@ -1,11 +1,16 @@
 import { env } from 'cloudflare:workers';
+import { recordActivity } from '@/lib/activity';
 import {
   audioKeyFor,
   deleteAudio,
   MAX_AUDIO_BYTES,
   putAudio,
 } from '@/lib/audio-storage';
-import { isAllowedCompanyEmail, requestEmail } from '@/lib/request-identity';
+import {
+  isAllowedCompanyEmail,
+  requestEmail,
+  authorizedCompanyEmail,
+} from '@/lib/request-identity';
 
 const textField = (value: unknown) => (typeof value === 'string' ? value : '');
 const user = async (request: Request) => {
@@ -33,7 +38,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const email = await requestEmail(request);
+  const email = await authorizedCompanyEmail(request);
   if (!isAllowedCompanyEmail(email))
     return Response.json({ error: 'Não autorizado' }, { status: 401 });
   const { id } = await params,
@@ -118,6 +123,7 @@ export async function PUT(
       { error: 'A daily não apareceu na lista após a atualização.' },
       { status: 500 },
     );
+  await recordActivity(u.email, 'edit', id, textField(data.client));
   return Response.json(
     { ok: true, id, audioKey, saved: true, record: saved },
     { headers: { 'cache-control': 'no-store' } },
