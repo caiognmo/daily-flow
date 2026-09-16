@@ -283,3 +283,4 @@ html :is(button,a,input,textarea,select,summary,[tabindex]):focus-visible{outlin
 .activity-panel .activity-filter-toggle{display:none}
 @media(max-width:640px){.activity-panel .activity-filter-toggle{display:flex;width:100%;justify-content:center;align-items:center;min-height:44px;font-size:14px;margin-top:16px}.activity-filters[data-expanded="false"]{display:none}.activity-filters{gap:12px}.activity-filters>.daily-date-field{min-width:0}}
 @media(max-width:520px){.filters>select[aria-label="Filtrar por tipo de processo"],.filters>.daily-date-field{grid-column:1/-1}}
+@media(max-width:360px){.consult-page>header{gap:8px;padding-inline:10px}.consult-page>header>button{padding-inline:10px}.consult-page .brand{min-width:0}.consult-page .account{gap:0}.consult-page .brand b{font-size:12px}}
