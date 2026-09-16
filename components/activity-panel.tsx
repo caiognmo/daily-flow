@@ -73,6 +73,7 @@ export function ActivityPanel({
   const [email, setEmail] = useState('');
   const [report, setReport] = useState('');
   const [action, setAction] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [inactive, setInactive] = useState(false);
   const [data, setData] = useState<ActivityData | null>(null);
   const [error, setError] = useState('');
@@ -142,7 +143,20 @@ export function ActivityPanel({
         Acessos sem login não são identificados. Registros disponíveis a partir
         desta atualização{data?.since ? ` (${dateText(data.since)})` : ''}.
       </p>
-      <div className="activity-filters">
+      <button
+        type="button"
+        className="activity-filter-toggle"
+        aria-expanded={filtersOpen}
+        aria-controls="activity-filters"
+        onClick={() => setFiltersOpen((open) => !open)}
+      >
+        {filtersOpen ? 'Recolher filtros do histórico' : 'Filtrar histórico'}
+      </button>
+      <div
+        id="activity-filters"
+        className="activity-filters"
+        data-expanded={filtersOpen}
+      >
         <DateField
           id="activity-from"
           label="De"

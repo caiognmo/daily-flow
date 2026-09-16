@@ -4,6 +4,12 @@ import Script from 'next/script';
 import { copyWithNotice } from '@/components/copy-notifications';
 import { ActivityPanel, ReportActivity } from '@/components/activity-panel';
 import { DateField } from '@/components/date-field';
+import {
+  processInfo,
+  processTypes,
+  technicalFields,
+  type ProcessType,
+} from '@/lib/report-process';
 import { handleFieldEnter } from '@/lib/form-keyboard';
 import { shareSavedDaily } from '@/lib/share-saved-daily';
 import { Button } from '@/components/ui/button';
@@ -77,6 +83,11 @@ const states = [
 type Employee = { name: string; role: string };
 type TrainingCall = { date: string; label: string; url: string };
 type FormData = {
+  processType: ProcessType;
+  erpParameters: string;
+  enabledModules: string;
+  newTools: string;
+  supportNotes: string;
   client: string;
   city: string;
   state: string;
@@ -126,6 +137,11 @@ declare global {
   }
 }
 const initial: FormData = {
+  processType: 'implementation',
+  erpParameters: '',
+  enabledModules: '',
+  newTools: '',
+  supportNotes: '',
   client: '',
   city: '',
   state: '',
@@ -639,6 +655,8 @@ export default function Home() {
       });
     return () => controller.abort();
   }, [homeSession?.email]);
+  const currentProcess = processInfo(data.processType);
+  const isTechnicalVisit = currentProcess.value === 'technical-visit';
   const plan = data.plan === 'Outro' ? data.customPlan : data.plan;
   const software =
     data.softwareMode === 'none'
@@ -681,17 +699,21 @@ export default function Home() {
   const message = useMemo(
     () =>
       [
+        `*Tipo de processo:* ${processInfo(data.processType).label}`,
         `*Cliente:* ${clientLine || '—'}`,
         `*Criado por:* ${dailyCreator || homeSession?.email || '—'}`,
         `*Plano:* ${plan || '—'}`,
-        `*Modalidade do treinamento:* ${trainingModeLine}`,
+        `*${isTechnicalVisit ? 'Modalidade da visita' : 'Modalidade do treinamento'}:* ${trainingModeLine}`,
         ...(data.trainingMode === 'online'
           ? [`*Links das calls:*\n${trainingCallsLine || '—'}`]
           : []),
-        `*Término do treinamento:* ${dateLine}`,
+        `*${isTechnicalVisit ? 'Data da visita' : 'Término do treinamento'}:* ${dateLine}`,
         `*Explicação sobre o fluxo de trabalho junto ao SIGECOM:* ${flow || '—'}`,
         `*Nivelamento dos funcionários:* ${employeesLine || '—'}`,
         `*Adequação no software:* ${software || '—'}`,
+        ...technicalFields
+          .filter(({ key }) => data[key]?.trim())
+          .map(({ key, label }) => `*${label}:* ${data[key]}`),
       ].join('\n'),
     [
       data,
@@ -705,6 +727,7 @@ export default function Home() {
       trainingCallsLine,
       dailyCreator,
       homeSession?.email,
+      isTechnicalVisit,
     ],
   );
   const copy = async () => {
@@ -895,7 +918,7 @@ export default function Home() {
         getText: (reportId) =>
           mode === 'text'
             ? message
-            : `*Resumo / SigeDaily — ${data.client || 'Cliente'}${reportLocation ? ` (${reportLocation})` : ''}*\n${getReportLink(reportId)}`,
+            : `*Resumo / SigeDaily — ${data.client || 'Cliente'}${reportLocation ? ` (${reportLocation})` : ''}*\n${processInfo(data.processType).label}\n${getReportLink(reportId)}`,
         openWindow: () => {
           const target = window.open('', '_blank');
           if (target) {
@@ -1113,6 +1136,11 @@ export default function Home() {
         onSignOut={signOut}
         onEdit={(row, current) => {
           setData({
+            processType: processInfo(current.processType).value,
+            erpParameters: current.erpParameters || '',
+            enabledModules: current.enabledModules || '',
+            newTools: current.newTools || '',
+            supportNotes: current.supportNotes || '',
             client: current.client || '',
             city: current.city || '',
             state: current.state || '',
@@ -1153,7 +1181,7 @@ export default function Home() {
   const actionBusy = saving || sharing || recording || processingAudio;
   const stepLabels = [
     'Cliente e plano',
-    'Dados do treinamento',
+    isTechnicalVisit ? 'Dados da visita técnica' : 'Dados do treinamento',
     'Fluxo e software',
     'Revisão e envio',
   ];
@@ -1164,7 +1192,7 @@ export default function Home() {
         <nav aria-label="Etapas do daily">
           {[
             ['01', 'Cliente & plano'],
-            ['02', 'Treinamento'],
+            ['02', isTechnicalVisit ? 'Visita técnica' : 'Treinamento'],
             ['03', 'Fluxo & software'],
             ['04', 'Revisar & enviar'],
           ].map(([n, l], i) => (
@@ -1189,7 +1217,7 @@ export default function Home() {
           <Brand />
           <div className="topbar-title">
             <small>
-              {editingId ? 'Alterando implantação' : 'Cadastro de implantação'}
+              {editingId ? 'Alterando relatório' : currentProcess.label}
             </small>
             <strong>{stepLabels[step - 1]}</strong>
           </div>
@@ -1249,6 +1277,20 @@ export default function Home() {
               <p className="lead">
                 Identifique o cliente e pesquise sua localização no Brasil.
               </p>
+              <fieldset className="process-field">
+                <legend>Tipo de processo</legend>
+                <div className="process-choices">
+                  {processTypes.map((process) => (
+                    <Choice
+                      key={process.value}
+                      active={data.processType === process.value}
+                      onClick={() => update('processType', process.value)}
+                    >
+                      {process.label}
+                    </Choice>
+                  ))}
+                </div>
+              </fieldset>
               <Label text="Nome do cliente" htmlFor="daily-client" />
               <VoiceField
                 label="nome do cliente"
@@ -1372,12 +1414,22 @@ export default function Home() {
           )}
           {step === 2 && (
             <section className="panel">
-              <h2 tabIndex={-1}>Dados do treinamento</h2>
+              <h2 tabIndex={-1}>
+                {isTechnicalVisit
+                  ? 'Dados da visita técnica'
+                  : 'Dados do treinamento'}
+              </h2>
               <p className="lead">
-                Registre a data de término e todos que participaram.
+                {isTechnicalVisit
+                  ? 'Registre quando ocorreu a visita e quem participou.'
+                  : 'Registre a data de término e todos que participaram.'}
               </p>
               <fieldset className="training-mode-field">
-                <legend>Modalidade do treinamento</legend>
+                <legend>
+                  {isTechnicalVisit
+                    ? 'Modalidade da visita'
+                    : 'Modalidade do treinamento'}
+                </legend>
                 <div className="training-mode-choices">
                   <Choice
                     active={data.trainingMode === 'presential'}
@@ -1525,13 +1577,21 @@ export default function Home() {
                 </section>
               )}
               <Label
-                text="Término do treinamento — calendário ou texto"
+                text={
+                  isTechnicalVisit
+                    ? 'Data da visita — calendário ou texto'
+                    : 'Término do treinamento — calendário ou texto'
+                }
                 htmlFor="training-end-date"
               />
               <div className="cols datecols">
                 <DateField
                   id="training-end-date"
-                  label="Término do treinamento"
+                  label={
+                    isTechnicalVisit
+                      ? 'Data da visita'
+                      : 'Término do treinamento'
+                  }
                   value={data.endDate}
                   onChange={(value) => {
                     update('endDate', value);
@@ -1547,7 +1607,11 @@ export default function Home() {
                 >
                   <input
                     className="input"
-                    aria-label="Término do treinamento por texto"
+                    aria-label={
+                      isTechnicalVisit
+                        ? 'Data da visita por texto'
+                        : 'Término do treinamento por texto'
+                    }
                     placeholder="Ou digite: próxima sexta"
                     value={data.endDateText}
                     onChange={(e) => {
@@ -1643,7 +1707,8 @@ export default function Home() {
             <section className="panel">
               <h2 tabIndex={-1}>Fluxo de trabalho e software</h2>
               <p className="lead">
-                Explique o fluxo e informe a adequação do software.
+                Registre os fluxos de trabalho, ajustes e recursos que o suporte
+                precisa conhecer.
               </p>
               <fieldset>
                 <legend>Explicação sobre o fluxo de trabalho</legend>
@@ -1677,6 +1742,34 @@ export default function Home() {
                   />
                 </VoiceField>
               </fieldset>
+              <section
+                className="technical-fields"
+                aria-labelledby="technical-details-title"
+              >
+                <h3 id="technical-details-title">
+                  Alterações realizadas no ERP
+                </h3>
+                <p>Preencha os itens aplicáveis ao atendimento.</p>
+                {technicalFields.map(({ key, label, placeholder }) => (
+                  <div key={key}>
+                    <Label text={label} htmlFor={key} />
+                    <VoiceField
+                      label={label}
+                      multiline
+                      onTranscript={(text) =>
+                        update(key, mergeVoiceText(data[key], text))
+                      }
+                    >
+                      <textarea
+                        id={key}
+                        placeholder={placeholder}
+                        value={data[key]}
+                        onChange={(event) => update(key, event.target.value)}
+                      />
+                    </VoiceField>
+                  </div>
+                ))}
+              </section>
               <fieldset>
                 <legend>Adequação no software</legend>
                 <div className="software">
@@ -1756,11 +1849,20 @@ export default function Home() {
                 </div>
                 <CheckCircle2 className="success" />
               </div>
-              <div className="preview">
+              <div
+                className="preview process-surface"
+                data-process={currentProcess.value}
+              >
                 <div className="previewtop">
                   PRÉVIA DA MENSAGEM <MessageCircle />
                 </div>
                 <div className="bubble">
+                  <span
+                    className="process-tag"
+                    data-process={currentProcess.value}
+                  >
+                    {currentProcess.label}
+                  </span>
                   <p>
                     <b>Cliente:</b> {clientLine || '—'}
                   </p>
@@ -1772,7 +1874,12 @@ export default function Home() {
                     <b>Plano:</b> {plan || '—'}
                   </p>
                   <p>
-                    <b>Modalidade do treinamento:</b> {trainingModeLine}
+                    <b>
+                      {isTechnicalVisit
+                        ? 'Modalidade da visita:'
+                        : 'Modalidade do treinamento:'}
+                    </b>{' '}
+                    {trainingModeLine}
                   </p>
                   {data.trainingMode === 'online' && (
                     <div className="preview-training-calls">
@@ -1802,7 +1909,12 @@ export default function Home() {
                     </div>
                   )}
                   <p>
-                    <b>Término do treinamento:</b> {dateLine}
+                    <b>
+                      {isTechnicalVisit
+                        ? 'Data da visita:'
+                        : 'Término do treinamento:'}
+                    </b>{' '}
+                    {dateLine}
                   </p>
                   <p>
                     <b>
@@ -1816,6 +1928,13 @@ export default function Home() {
                   <p>
                     <b>Adequação no software:</b> {software || '—'}
                   </p>
+                  {technicalFields
+                    .filter(({ key }) => data[key]?.trim())
+                    .map(({ key, label }) => (
+                      <p className="technical-text" key={key}>
+                        <b>{label}:</b> {data[key]}
+                      </p>
+                    ))}
                   <small>agora ✓✓</small>
                 </div>
               </div>
@@ -2135,6 +2254,8 @@ function Label({ text, htmlFor }: { text: string; htmlFor?: string }) {
   );
 }
 function ReportView({ data }: { data: ReportPayload }) {
+  const process = processInfo(data.processType);
+  const isTechnicalVisit = process.value === 'technical-visit';
   const plan = data.plan === 'Outro' ? data.customPlan : data.plan,
     locationText = [data.city, data.state].filter(Boolean).join('/'),
     software =
@@ -2161,7 +2282,7 @@ function ReportView({ data }: { data: ReportPayload }) {
   const shareReportOnWhatsApp = () => {
     const shareLocation = [data.city, data.state].filter(Boolean).join(' - '),
       title = `Resumo / SigeDaily — ${data.client || 'Cliente'}${shareLocation ? ` (${shareLocation})` : ''}`,
-      text = `*${title}*\n${window.location.href}`;
+      text = `*${title}*\n${process.label}\n${window.location.href}`;
     window.open(
       `https://wa.me/?text=${encodeURIComponent(text)}`,
       '_blank',
@@ -2174,7 +2295,7 @@ function ReportView({ data }: { data: ReportPayload }) {
       <header>
         <Brand />
         <div className="public-report-actions">
-          <span>RELATÓRIO DE IMPLANTAÇÃO</span>
+          <span>{process.label.toUpperCase()}</span>
           <button
             type="button"
             aria-label="Compartilhar relatório pelo WhatsApp"
@@ -2184,7 +2305,10 @@ function ReportView({ data }: { data: ReportPayload }) {
           </button>
         </div>
       </header>
-      <article>
+      <article className="process-surface" data-process={process.value}>
+        <span className="process-tag" data-process={process.value}>
+          {process.label}
+        </span>
         <div className="report-meta">
           <span>
             DAILY / RESUMO
@@ -2200,11 +2324,17 @@ function ReportView({ data }: { data: ReportPayload }) {
             <strong>{plan || 'Não informado'}</strong>
           </section>
           <section>
-            <small>Término do treinamento</small>
+            <small>
+              {isTechnicalVisit ? 'Data da visita' : 'Término do treinamento'}
+            </small>
             <strong>{data.endDateText || fmt(data.endDate)}</strong>
           </section>
           <section className="wide">
-            <small>Modalidade do treinamento</small>
+            <small>
+              {isTechnicalVisit
+                ? 'Modalidade da visita'
+                : 'Modalidade do treinamento'}
+            </small>
             <strong>{reportTrainingMode}</strong>
           </section>
           {data.trainingMode === 'online' && (
@@ -2246,6 +2376,14 @@ function ReportView({ data }: { data: ReportPayload }) {
             <small>Explicação sobre o fluxo de trabalho junto ao SIGECOM</small>
             <p>{flow || 'Não informado'}</p>
           </section>
+          {technicalFields
+            .filter(({ key }) => data[key]?.trim())
+            .map(({ key, label }) => (
+              <section className="wide" key={key}>
+                <small>{label}</small>
+                <p>{data[key]}</p>
+              </section>
+            ))}
           {data.audioUrl && (
             <section className="wide report-audio">
               <small>Áudio da daily</small>
@@ -2336,6 +2474,8 @@ function DailyConsultation({
   const [query, setQuery] = useState(''),
     [uf, setUf] = useState(''),
     [planFilter, setPlanFilter] = useState(''),
+    [processFilter, setProcessFilter] = useState(''),
+    [expandedCard, setExpandedCard] = useState<string | null>(null),
     [date, setDate] = useState(''),
     [filtersOpen, setFiltersOpen] = useState(false),
     [showPermissions, setShowPermissions] = useState(false);
@@ -2381,10 +2521,13 @@ function DailyConsultation({
       (!query || hay.includes(query.toLowerCase())) &&
       (!uf || r.state === uf) &&
       (!planFilter || r.plan === planFilter) &&
+      (!processFilter ||
+        processInfo(JSON.parse(r.payload).processType).value ===
+          processFilter) &&
       (!date || r.end_date === date)
     );
   });
-  const activeFilterCount = [query, uf, planFilter, date].filter(
+  const activeFilterCount = [query, uf, planFilter, date, processFilter].filter(
     Boolean,
   ).length;
   const payload = (row: DailyRow) => {
@@ -2406,7 +2549,7 @@ function DailyConsultation({
     else setNotice('Você não possui permissão para excluir.');
   };
   const share = async (row: DailyRow) => {
-    const text = `*Resumo / SigeDaily — ${row.client}${row.city || row.state ? ` (${[row.city, row.state].filter(Boolean).join(' - ')})` : ''}*\n${link(row)}`;
+    const text = `*Resumo / SigeDaily — ${row.client}${row.city || row.state ? ` (${[row.city, row.state].filter(Boolean).join(' - ')})` : ''}*\n${processInfo(payload(row).processType).label}\n${link(row)}`;
     if (navigator.share) {
       try {
         await navigator.share({ text });
@@ -2419,6 +2562,10 @@ function DailyConsultation({
     const { jsPDF } = await import('jspdf');
     const d = payload(row),
       doc = new jsPDF();
+    const process = processInfo(d.processType);
+    doc.setDrawColor(process.color);
+    doc.setLineWidth(1.5);
+    doc.line(18, 10, 192, 10);
     doc.setTextColor(0, 73, 119);
     doc.setFontSize(22);
     doc.text('SigeDaily', 18, 22);
@@ -2427,6 +2574,7 @@ function DailyConsultation({
     doc.text(d.client || 'Cliente', 18, 38);
     doc.setFontSize(11);
     const lines = [
+      `Tipo de processo: ${process.label}`,
       `Local: ${[d.city, d.state].filter(Boolean).join(' - ') || 'Não informado'}`,
       `Plano: ${d.plan === 'Outro' ? d.customPlan : d.plan}`,
       `Modalidade: ${d.trainingMode === 'online' ? 'Online' : d.trainingMode === 'presential' ? 'Presencial' : 'Não informado'}`,
@@ -2447,16 +2595,28 @@ function DailyConsultation({
             }`,
           ]
         : []),
-      `Término: ${d.endDateText || fmt(d.endDate)}`,
+      `${process.value === 'technical-visit' ? 'Data da visita' : 'Término'}: ${d.endDateText || fmt(d.endDate)}`,
       `Funcionários: ${(d.employees || []).map((e) => `${e.name} (${e.role})`).join(', ') || 'Não informado'}`,
       `Fluxo: ${d.flowText || 'Não informado'}`,
+      ...technicalFields
+        .filter(({ key }) => d[key]?.trim())
+        .map(({ key, label }) => `${label}: ${d[key]}`),
       `Software: ${d.softwareMode === 'none' ? 'Não utilizava software' : d.softwareMode === 'migration' ? `Migração - ${d.softwareName}` : d.customSoftware}`,
     ];
     let y = 52;
     for (const line of lines) {
       const split = doc.splitTextToSize(line, 174);
-      doc.text(split, 18, y);
-      y += split.length * 6 + 5;
+      for (const part of split) {
+        if (y > 278) {
+          doc.addPage();
+          doc.setDrawColor(process.color);
+          doc.line(18, 10, 192, 10);
+          y = 22;
+        }
+        doc.text(part, 18, y);
+        y += 6;
+      }
+      y += 5;
     }
     doc.save(`sigedaily-${d.client || 'cliente'}.pdf`);
   };
@@ -2556,7 +2716,7 @@ function DailyConsultation({
           <div>
             <span>Central de relatórios</span>
             <h1>Consultar dailys</h1>
-            <p>Pesquise, filtre e compartilhe os registros de implantação.</p>
+            <p>Pesquise, filtre e compartilhe os relatórios de atendimento.</p>
           </div>
           <div className="consult-title-actions">
             <button className="consult-create" onClick={onCreate}>
@@ -2727,7 +2887,10 @@ function DailyConsultation({
               <Filter /> Filtros
               {activeFilterCount > 0 && <b>{activeFilterCount}</b>}
             </span>
-            <small>{filtered.length} resultados</small>
+            <small>
+              {filtered.length}{' '}
+              {filtered.length === 1 ? 'resultado' : 'resultados'}
+            </small>
             <ChevronDown className={filtersOpen ? 'open' : ''} />
           </button>
         </div>
@@ -2746,7 +2909,7 @@ function DailyConsultation({
             value={uf}
             onChange={(e) => setUf(e.target.value)}
           >
-            <option value="">Todos os estados</option>
+            <option value="">Estado: todos</option>
             {states.map(([code, name]) => (
               <option key={code} value={code}>
                 {name}
@@ -2758,9 +2921,21 @@ function DailyConsultation({
             value={planFilter}
             onChange={(e) => setPlanFilter(e.target.value)}
           >
-            <option value="">Todos os planos</option>
+            <option value="">Plano: todos</option>
             {plans.map((p) => (
               <option key={p}>{p}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Filtrar por tipo de processo"
+            value={processFilter}
+            onChange={(event) => setProcessFilter(event.target.value)}
+          >
+            <option value="">Todos os processos</option>
+            {processTypes.map((process) => (
+              <option key={process.value} value={process.value}>
+                {process.label}
+              </option>
             ))}
           </select>
           <DateField
@@ -2780,20 +2955,51 @@ function DailyConsultation({
         ) : (
           <div className="daily-list">
             {filtered.map((row) => (
-              <article key={row.id}>
+              <article
+                key={row.id}
+                className="process-surface"
+                data-process={processInfo(payload(row).processType).value}
+              >
                 <div className="daily-main">
                   <small>
                     {new Date(row.created_at).toLocaleDateString('pt-BR')} •{' '}
                     {row.created_by}
                   </small>
-                  <h2>{row.client}</h2>
+                  <h2>
+                    <a href={link(row)}>{row.client}</a>
+                  </h2>
+                  <span
+                    className="process-tag"
+                    data-process={processInfo(payload(row).processType).value}
+                  >
+                    {processInfo(payload(row).processType).label}
+                  </span>
                   <p>
                     {[row.city, row.state].filter(Boolean).join(' - ') ||
                       'Local não informado'}
                   </p>
                   <span>{row.plan || 'Plano não informado'}</span>
                 </div>
-                <div className="daily-actions">
+                <button
+                  type="button"
+                  className="card-options-toggle"
+                  aria-expanded={expandedCard === row.id}
+                  aria-controls={'daily-actions-' + row.id}
+                  onClick={() =>
+                    setExpandedCard((current) =>
+                      current === row.id ? null : row.id,
+                    )
+                  }
+                >
+                  <Settings2 />{' '}
+                  {expandedCard === row.id ? 'Recolher opções' : 'Opções'}{' '}
+                  <ChevronDown />
+                </button>
+                <div
+                  className="daily-actions"
+                  id={'daily-actions-' + row.id}
+                  data-expanded={expandedCard === row.id}
+                >
                   <a href={link(row)} target="_blank" rel="noreferrer">
                     <ExternalLink /> Abrir
                   </a>
