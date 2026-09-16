@@ -1,9 +1,9 @@
 export const processTypes = [
-  { value: 'implementation', label: 'Nova implementação', color: '#0073c9' },
+  { value: 'implementation', label: 'Nova Implementação (Onboarding)', color: '#0073c9' },
   { value: 'technical-visit', label: 'Visita técnica', color: '#16804a' },
   {
     value: 'implemented-client',
-    label: 'Cliente implementado',
+    label: 'Novo treinamento (Ongoing)',
     color: '#7950b5',
   },
 ] as const;
